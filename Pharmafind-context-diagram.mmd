@@ -1,0 +1,23 @@
+flowchart LR
+    PF["«system»<br/><b>Pharmafind</b>"]
+
+    POS["«system»<br/>Pharmacy inventory /<br/>POS systems"]
+    LIC["«system»<br/>Pharmacy licensing<br/>registry"]
+    DRUG["«system»<br/>Drug reference<br/>database"]
+
+    GEO["«system»<br/>Geolocation /<br/>geocoding service"]
+    MAP["«system»<br/>Maps & directions<br/>service"]
+    EMAIL["«system»<br/>Email service<br/>(sync alerts &<br/>security codes)"]
+
+    POS ---|"1..*"| PF
+    LIC --- PF
+    DRUG --- PF
+
+    PF --- GEO
+    PF --- MAP
+    PF --- EMAIL
+
+    classDef core fill:#dbeafe,stroke:#1e40af,stroke-width:2px;
+    classDef ext fill:#f8fafc,stroke:#475569;
+    class PF core;
+    class POS,LIC,DRUG,GEO,MAP,EMAIL ext;

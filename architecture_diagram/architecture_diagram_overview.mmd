@@ -1,0 +1,22 @@
+flowchart TB
+    L1["1 · PRESENTATION<br/><i>Consumer app, Pharmacy portal, and Admin console</i>"]
+    L2["2 · INTERFACE MANAGEMENT/SECURITY<br/><i>Entry Point API, Authentication emails and access control</i>"]
+    L3["3 · INTERNAL APP LOGIC<br/><i>Pharmafind's backend</i>"]
+    L4["4 · DATA & SYSTEM SERVICES<br/><i>Database · File storage · Integration adapters</i>"]
+    L5["5 · EXTERNAL SYSTEMS<br/><i>POS · Licensing registry · Drug reference ·<br/>Geocoding · Maps and directions · Email Notifications</i>"]
+
+    L1 -->|"Requestss/Responses(HTTPS)"| L2
+    L2 -->|"calls"| L3
+    L3 -->|"data access and external system calls"| L4
+    L4 -->|"external system calls"| L5
+
+    classDef client fill:#fef9c1;
+    classDef entry_api fill:#ede9fb;
+    classDef app_backend fill:#dbeaff;
+    classDef app_data fill:#dcfce9;
+    classDef ext_systems fill:#ffe5b4;
+    class L1 client;
+    class L2 entry_api;
+    class L3 app_backend;
+    class L4 app_data;
+    class L5 ext_systems;

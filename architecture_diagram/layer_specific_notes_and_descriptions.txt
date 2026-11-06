@@ -1,0 +1,82 @@
+The architecture of Pharmafind will be a layered one, with 4 layers + 1 of external systems.
+
+There is an important assumption regarding what this Architecture Diagram will be:
+All pharmacy feeds(data coming in from their inventory) use Pharmafind's standard data format and identify products by Pharmafind
+catalog IDs (taken from the general drug reference database), so incoming data only needs to be validated, not translated.
+If a Pharmacy's feed does not comply with this format, it would be rejected. This way, we dont need to include even more components
+that would need to parse and change the data coming in from the pharmacies.
+
+
+
+
+The layers and their components are:
+
+-------------------------------------------------
+ 
+LAYER 1: Presentation (what the client sees)
+Components:
+- Client App (mobile+web): Searches for medicines, compares various pharmacy results, gets directions to the chosen pharmacy.
+- Pharmacy-side Portal: For manual information changes (stock, price, etc), CSV uploads, automatic feed setup, pharmacy verification status,
+"last-sync" dashboard.
+- Admin-side Console: For reviewing new pharmacy registrations and manual license checks.
+ 
+-------------------------------------------------
+ 
+LAYER 2: Interface Management and Security (for requests, front entrance to backend)
+Components:
+- REST API (entry point API): Manages the requests that come in, rejects malformed input, and sends them to the right place.
+Also receives feed uploads/pushes and sends them to Feed Import. HTTPS requests from L1, JSON responses.
+- Access and Authentication: Manages logins, user roles (consumer, pharmacy staff, admin), password creation/reset, and security code logic.
+Makes sure each pharmacy can only see and change its own data. Consumers can search without logging in.
+ 
+-------------------------------------------------
+ 
+LAYER 3: App logic (backend)
+Components:
+- Notifications: Sets up when to send an email notification and what to say in it (security codes, stale-sync alerts for pharmacy stock).
+Sends them through the Email adapter.
+- Search and Compare: Matches the inputted medicine's name, ranks pharmacies by distance, returns product data (price, presentation, "last updated"),
+displays/returns a verified pharmacy badge. Uses the Geocoding adapter (when the user types an address) and the Directions adapter (route to the chosen pharmacy).
+- Pharmacy Account Management and Verification: For pharmacy registration, profiles, and their pharmacy verification status (pending? verified?).
+Pharmacies are not shown in search until they are verified. Stores license documents in File Storage and uses the License Check adapter.
+- Product Catalog and Listings: Holds product information (presentation, etc) along with each pharmacy's stock, price,
+and pharmacy accessibility status (for physically disabled users). Gets general product info from the Drug Reference adapter.
+- Feed Import: Single entry point for pharmacy stock/price data, whether it comes from a CSV upload in the portal or from an automatic feed
+pulled by the Background Worker. Checks each row for correctness (positive price, whole-number stock, existing catalog ID, required fields), saves the valid rows
+to Product Catalog and Listings, keeps a copy of the file in File Storage, and records the latest sync time for that pharmacy (e.g. "2:00am").
+- Job Scheduler and Background Worker: Doesn't respond to a request specifically, runs in the background. Holds a list of jobs/tasks to do every so often
+(exact intervals can be defined in the requirement documentation). Counts the time to trigger these jobs (scheduler) and executes these jobs (worker).
+Jobs:
++ Check for stale-sync on each pharmacy (if older than 24 hours, tells Notifications to email the pharmacy).
++ For pharmacies with an automatic feed, fetches the latest product data (stock and prices) from the point of sale (POS) system through the POS feed connector
+and hands it to Feed Import.
++ Updates general product info from the drug reference database (on a nightly basis would be nice).
++ If email notifications failed to send, try to send them again (every 5 minutes perhaps).
+ 
+-------------------------------------------------
+ 
+LAYER 4: Data and System Services (internal storage, plus the adapters that talk to the external systems)
+Components:
+- Relational DB with Geo Extension: Stores data for accounts, pharmacies, products, listings, sync logs, and the job table (for Job Scheduler and Background Worker).
+Geographic location included in the DB to be able to give clear results to the user/client about which pharmacy is closer.
+- File Storage: Holds uploaded files (CSV feed files and license documents).
+- SUBSYSTEM: Integration Adapters (each one wraps one external system that Pharmafind needs to communicate with. CAN BE REPLACED WITH FAKE/MOCK VERSIONS for our use case)
+    SUBSYSTEM COMPONENTS (Adapters):
+    - Email: Email service (sync alerts and security codes). Used by Notifications.
+    - Drug Reference: Drug Reference DB with general product information and brand/generic names. Used by Product Catalog and Listings.
+    - POS feed connector: Pharmacy POS (inventory) systems, all using Pharmafind's standard format. CONNECTS TO ALL PHARMACIES, SO 1..* SHOULD BE SPECIFIED
+      IN ITS CONNECTION. Used by Feed Import / Background Worker.
+    - Pharmacy License Check: Pharmacy Licensing Registry (from whatever Health Ministry is in charge). Could be automated or be an admin manually checking.
+      Used by Pharmacy Account Management and Verification.
+    - Directions: Maps and directions service (map/route link, pointing to the pharmacy). Used by Search and Compare.
+    - Geocoding: Geolocation and geocoding service (coordinates from an address the user types). Used by Search and Compare.
+ 
+-------------------------------------------------
+ 
+LAYER 5: External Systems (outlined in context diagram). Each one connected to its respective adapter in Layer 4:
+- Pharmacy inventory / POS systems (1..*)
+- Pharmacy licensing registry
+- Drug reference database
+- Geolocation / geocoding service
+- Maps & directions service
+- Email service (sync alerts & security codes)

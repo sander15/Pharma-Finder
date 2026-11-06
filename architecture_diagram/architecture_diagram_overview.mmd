@@ -2,11 +2,12 @@ flowchart TB
     L1["1 · PRESENTATION<br/><i>Consumer app, Pharmacy portal, and Admin console</i>"]
     L2["2 · INTERFACE MANAGEMENT/SECURITY<br/><i>Entry Point API, Authentication emails and access control</i>"]
     L3["3 · INTERNAL APP LOGIC<br/><i>Pharmafind's backend</i>"]
-    L4["4 · DATA & SYSTEM SERVICES<br/><i>Database · File storage · Integration adapters</i>"]
+    L4["4 · DATA AND SYSTEM SERVICES<br/><i>Database · File storage · Integration adapters</i>"]
     L5["5 · EXTERNAL SYSTEMS<br/><i>POS · Licensing registry · Drug reference ·<br/>Geocoding · Maps and directions · Email Notifications</i>"]
 
-    L1 -->|"Requestss/Responses(HTTPS)"| L2
+    L1 -->|"Requests/Responses(HTTPS)"| L2
     L2 -->|"calls"| L3
+    L2 -->|"data access(DB requests)"| L4
     L3 -->|"data access and external system calls"| L4
     L4 -->|"external system calls"| L5
 

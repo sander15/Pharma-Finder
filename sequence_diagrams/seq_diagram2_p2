@@ -1,0 +1,74 @@
+sequenceDiagram
+    actor U as User (pharmacy manager)
+    participant A as A: Account
+    participant PS as PS: PharmacyStaff
+    participant PH as PH: Pharmacy
+    participant L as L: Listing
+    participant SL as SL: SyncLog
+    participant FI as FI: FeedImport
+    participant SJ as SJ: ScheduledJob
+    participant N as N: Notification
+
+    Note over U,N: Part A - Dashboard (last-sync time and preview of the public listing)
+
+    U->>A: login()
+    A-->>U: authenticated session
+    U->>PS: viewLastSync()
+    PS->>A: hasPermission()
+    A-->>PS: permission result
+    PS->>A: canAccessPharmacy()
+    A-->>PS: own pharmacy only
+    break access denied
+        PS-->>U: Error (no access to this pharmacy)
+    end
+
+    PS->>PH: isSyncStale()
+    PH->>SL: getLatestFor()
+    SL-->>PH: latest sync (syncedAt, success)
+    PH->>SL: isOlderThan(24 hours)
+    SL-->>PH: true or false
+    PH-->>PS: last-sync time and stale flag
+
+    PS->>PH: isVisibleInSearch()
+    PH->>PH: isVerified()
+    PH-->>PS: live status and verified badge
+
+    PS->>PH: getListings()
+    loop each Listing
+        PH->>L: isInStock()
+        L-->>PH: stock status, price, lastUpdated
+    end
+    PH-->>PS: public listing preview
+    PS-->>U: Dashboard (last-sync time, stale alert, public listing preview)
+
+    Note over U,N: Part B - Stale-sync alert (background, no user action)
+
+    SJ->>SJ: isDue()
+    SJ->>SJ: execute()
+    SJ->>SJ: checkStaleSync()
+    SJ->>FI: «triggers»
+    FI->>PH: isSyncStale()
+    PH->>SL: getLatestFor()
+    SL-->>PH: latest sync (syncedAt, success)
+    PH->>SL: isOlderThan(24 hours)
+    SL-->>PH: true or false
+    PH-->>FI: stale flag
+    FI-->>SJ: stale flag
+
+    alt sync older than 24 hours
+        SJ->>N: «triggers»
+        N->>N: compose()
+        N->>N: send()
+        alt email sent
+            N-->>A: stale-sync alert addressed to the pharmacy account
+            A-->>U: Email: data has not synced within the expected window
+        else email failed
+            N->>N: markFailed()
+            SJ->>SJ: retryFailedEmails()
+            SJ->>N: retry()
+            N-->>A: stale-sync alert addressed to the pharmacy account
+            A-->>U: Email: data has not synced within the expected window
+        end
+    else sync is fresh
+        Note over SJ,FI: No action needed
+    end

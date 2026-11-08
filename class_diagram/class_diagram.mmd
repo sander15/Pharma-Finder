@@ -1,0 +1,56 @@
+flowchart TD
+    Consumer["Consumer"]
+    Search["Search"]
+    Account["Account"]
+    Staff["Pharmacy Staff"]
+    Admin["Admin"]
+    Pharmacy["Pharmacy"]
+    Location["Location (geo)"]
+    Verification["Verification Request"]
+    License["License Document"]
+    Product["Product"]
+    DrugRef["Drug Reference Entry"]
+    Listing["Listing (stock, price)"]
+    AutoFeed["Automatic Feed (POS)"]
+    FeedImport["Feed Import"]
+    SyncLog["Sync Log"]
+    Notification["Notification"]
+    SecCode["Security Code"]
+    Job["Scheduled Job"]
+
+    %% Users and accounts
+    Account ---|"1 / 0..1<br>acts-as"| Staff
+    Account ---|"1 / 0..1<br>acts-as"| Admin
+    Staff ---|"1..* / 1<br>works-at"| Pharmacy
+    SecCode ---|"0..* / 1<br>issued-to"| Account
+    Notification ---|"0..* / 1<br>addressed-to"| Account
+
+    %% Pharmacy, location and verification
+    Pharmacy ---|"1 / 1<br>located-at"| Location
+    Pharmacy ---|"1 / 1..*<br>undergoes"| Verification
+    Verification ---|"1 / 1..*<br>supported-by"| License
+    Admin ---|"0..1 / 0..*<br>reviews"| Verification
+
+    %% Catalog and listings
+    Product ---|"1..* / 1<br>described-by"| DrugRef
+    Product ---|"1 / 0..*<br>listed-as"| Listing
+    Pharmacy ---|"1 / 0..*<br>stocks"| Listing
+
+    %% Feed import and synchronisation
+    Pharmacy ---|"1 / 0..1<br>configures"| AutoFeed
+    Pharmacy ---|"1 / 0..*<br>submits"| FeedImport
+    AutoFeed ---|"0..1 / 0..*<br>produces"| FeedImport
+    FeedImport ---|"0..* / 0..*<br>updates"| Listing
+    FeedImport ---|"1 / 1<br>recorded-in"| SyncLog
+    Pharmacy ---|"1 / 0..*<br>synced-by"| SyncLog
+
+    %% Background jobs and notifications
+    Job ---|"0..1 / 0..*<br>triggers"| FeedImport
+    Job ---|"0..1 / 0..*<br>triggers"| Notification
+
+    %% Searching and directions
+    Consumer ---|"1 / 0..*<br>performs"| Search
+    Search ---|"0..* / 1<br>looks-for"| Product
+    Search ---|"0..* / 0..*<br>returns"| Listing
+    Search ---|"0..* / 1<br>originates-at"| Location
+    Consumer ---|"0..* / 0..*<br>gets-directions-to"| Pharmacy

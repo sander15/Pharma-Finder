@@ -1,0 +1,121 @@
+sequenceDiagram
+    actor U as User (pharmacy manager)
+    participant A as A: Account
+    participant PS as PS: PharmacyStaff
+    participant PH as PH: Pharmacy
+    participant L as L: Listing
+    participant AF as AF: AutomaticFeed
+    participant SJ as SJ: ScheduledJob
+    participant FI as FI: FeedImport
+    participant SL as SL: SyncLog
+
+    U->>A: login()
+    A-->>U: authenticated session
+
+    alt Manual entry (small pharmacy)
+        U->>PS: updateListing()
+        PS->>A: hasPermission()
+        A-->>PS: permission result
+        PS->>A: canAccessPharmacy()
+        A-->>PS: own pharmacy only
+        break access denied
+            PS-->>U: Error (no access to this pharmacy)
+        end
+        PS->>PH: getListings()
+        PH->>L: updateStock()
+        PH->>L: updatePrice()
+        L->>L: validate()
+        alt valid
+            L-->>PH: saved (lastUpdated refreshed)
+            PH-->>PS: updated Listing
+            PS-->>U: Update confirmed
+        else invalid
+            L-->>PH: rejected (invalid price or stock)
+            PH-->>PS: validation error
+            PS-->>U: Error with details
+        end
+
+    else CSV upload (portal)
+        U->>PS: uploadCsv()
+        PS->>A: hasPermission()
+        A-->>PS: permission result
+        PS->>A: canAccessPharmacy()
+        A-->>PS: own pharmacy only
+        break access denied
+            PS-->>U: Error (no access to this pharmacy)
+        end
+        PS->>PH: «submits»
+        PH->>FI: validateRows()
+        FI->>FI: validatePrice()
+        FI->>FI: validateStock()
+        FI->>FI: validateCatalogId()
+        alt valid rows found
+            FI->>FI: saveValidRows()
+            loop each valid row
+                FI->>L: updateStock()
+                FI->>L: updatePrice()
+                L->>L: validate()
+                L-->>FI: Listing saved
+            end
+            FI->>FI: storeFileCopy()
+            FI->>FI: recordSyncTime()
+            FI->>SL: record()
+            SL-->>FI: success logged
+        else feed rejected (non-compliant format)
+            FI->>SL: record()
+            SL-->>FI: failure logged
+        end
+        FI-->>PH: import result (total, valid, rejected rows)
+        PH-->>PS: import result
+        PS-->>U: Import summary
+
+    else Automatic feed (POS system)
+        U->>PS: configureAutomaticFeed()
+        PS->>A: hasPermission()
+        A-->>PS: permission result
+        PS->>A: canAccessPharmacy()
+        A-->>PS: own pharmacy only
+        break access denied
+            PS-->>U: Error (no access to this pharmacy)
+        end
+        PS->>PH: «configures»
+        PH->>AF: testConnection()
+        AF-->>PH: connection result
+        break connection failed
+            PH-->>PS: connection error
+            PS-->>U: Error (check POS connection)
+        end
+        PH->>AF: enable()
+        AF-->>PH: feed enabled
+        PH-->>PS: feed enabled
+        PS-->>U: Automatic feed active
+
+        loop every scheduled interval (background, no user involved)
+            SJ->>SJ: isDue()
+            SJ->>SJ: execute()
+            SJ->>SJ: pullPosFeeds()
+            SJ->>FI: «triggers»
+            FI->>AF: fetchLatestData()
+            AF-->>FI: latest stock and price rows
+            FI->>FI: validateRows()
+            FI->>FI: validatePrice()
+            FI->>FI: validateStock()
+            FI->>FI: validateCatalogId()
+            alt valid rows found
+                FI->>FI: saveValidRows()
+                loop each valid row
+                    FI->>L: updateStock()
+                    FI->>L: updatePrice()
+                    L->>L: validate()
+                    L-->>FI: Listing saved
+                end
+                FI->>FI: storeFileCopy()
+                FI->>FI: recordSyncTime()
+                FI->>SL: record()
+                SL-->>FI: success logged
+            else feed rejected (non-compliant format)
+                FI->>SL: record()
+                SL-->>FI: failure logged
+            end
+        end
+    end

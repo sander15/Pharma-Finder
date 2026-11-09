@@ -296,6 +296,12 @@ classDiagram
         retrieve()
         remove()
     }
+    class RelationalDbGeo {
+        <<service - Layer 4>>
+        save()
+        query()
+        geoQuery()
+    }
     class EmailAdapter {
         <<interface - Layer 4>>
         sendEmail()
@@ -351,7 +357,10 @@ classDiagram
 
     %% Background jobs and notifications
     ScheduledJob "0..1" -- "0..*" FeedImport : triggers
-    ScheduledJob "0..1" -- "0..*" Notification : triggers
+    ScheduledJob "0..1" -- "0..*" Notification : triggers / retries
+    ScheduledJob "0..*" -- "0..*" AutomaticFeed : triggers pulls of
+    ScheduledJob "0..*" -- "0..*" SyncLog : checks stale-sync of
+    ScheduledJob "0..*" -- "0..*" DrugReferenceEntry : refreshes
 
     %% Searching and directions
     Consumer "1" -- "0..*" Search : performs
@@ -361,7 +370,7 @@ classDiagram
     Consumer "0..*" -- "0..*" Pharmacy : gets-directions-to
 
     %% Security code delivery
-    SecurityCode "1" -- "0..1" Notification : delivered-by
+    SecurityCode "0..1" -- "0..1" Notification : delivered-by
 
     %% Layer 1: who uses which UI
     Consumer ..> ClientApp : uses
@@ -379,6 +388,7 @@ classDiagram
     RestApi ..> Listing : routes manual edits
     RestApi ..> FeedImport : routes uploads
     RestApi ..> VerificationRequest : routes reviews
+    RestApi ..> Pharmacy : routes registration and profiles
     AccessAndAuthentication ..> Account : authenticates
     AccessAndAuthentication ..> SecurityCode : issues and checks
 
@@ -391,3 +401,13 @@ classDiagram
     VerificationRequest ..> LicenseCheckAdapter : checked-via
     Search ..> DirectionsAdapter : routes-via
     Location ..> GeocodingAdapter : geocoded-via
+    PosFeedConnector ..> Pharmacy : 1..* connects-to
+
+    %% Domain -> Layer 4 (Relational DB with Geo Extension)
+    Account ..> RelationalDbGeo : stored-in
+    Pharmacy ..> RelationalDbGeo : stored-in
+    Location ..> RelationalDbGeo : stored-in (geo)
+    Product ..> RelationalDbGeo : stored-in
+    Listing ..> RelationalDbGeo : stored-in
+    SyncLog ..> RelationalDbGeo : stored-in
+    ScheduledJob ..> RelationalDbGeo : stored-in (job table)

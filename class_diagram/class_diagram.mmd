@@ -1,40 +1,41 @@
 flowchart TD
-    Consumer["Consumer"]
-    Search["Search"]
-    Account["Account"]
-    Staff["Pharmacy Staff"]
-    Admin["Admin"]
-    Pharmacy["Pharmacy"]
-    Location["Location (geo)"]
-    Verification["Verification Request"]
-    License["License Document"]
-    Product["Product"]
-    DrugRef["Drug Reference Entry"]
-    Listing["Listing (stock, price)"]
-    AutoFeed["Automatic Feed (POS)"]
-    FeedImport["Feed Import"]
-    SyncLog["Sync Log"]
-    Notification["Notification"]
-    SecCode["Security Code"]
-    Job["Scheduled Job"]
+    Consumer["«actor - Outside layers»<br>Consumer"]
+    Search["«entity - Layer 3»<br>Search"]
+    Account["«entity - Layer 2»<br>Account"]
+    Staff["«actor - Outside layers»<br>Pharmacy Staff"]
+    Admin["«actor - Outside layers»<br>Admin"]
+    Pharmacy["«entity - Layer 3»<br>Pharmacy"]
+    Location["«entity - Layer 3»<br>Location (geo)"]
+    Verification["«entity - Layer 3»<br>Verification Request"]
+    License["«entity - Layer 3»<br>License Document"]
+    Product["«entity - Layer 3»<br>Product"]
+    DrugRef["«entity - Layer 3»<br>Drug Reference Entry"]
+    Listing["«entity - Layer 3»<br>Listing (stock, price)"]
+    AutoFeed["«entity - Layer 3»<br>Automatic Feed (POS)"]
+    FeedImport["«entity - Layer 3»<br>Feed Import"]
+    SyncLog["«entity - Layer 3»<br>Sync Log"]
+    Notification["«entity - Layer 3»<br>Notification"]
+    SecCode["«entity - Layer 2»<br>Security Code"]
+    Job["«entity - Layer 3»<br>Scheduled Job"]
 
     %% Layer 1 UI (boundary)
-    ClientApp["«boundary»<br>Client App"]
-    Portal["«boundary»<br>Pharmacy Portal"]
-    Console["«boundary»<br>Admin Console"]
+    ClientApp["«boundary - Layer 1»<br>Client App"]
+    Portal["«boundary - Layer 1»<br>Pharmacy Portal"]
+    Console["«boundary - Layer 1»<br>Admin Console"]
 
     %% Layer 2 (control)
-    RestApi["«control»<br>REST API"]
-    AuthSvc["«control»<br>Access and Authentication"]
+    RestApi["«control - Layer 2»<br>REST API"]
+    AuthSvc["«control - Layer 2»<br>Access and Authentication"]
 
     %% Layer 4 (storage and adapters)
-    Files["«service»<br>File Storage"]
-    EmailA["«interface»<br>Email Adapter"]
-    DrugA["«interface»<br>Drug Reference Adapter"]
-    PosA["«interface»<br>POS Feed Connector"]
-    LicA["«interface»<br>License Check Adapter"]
-    DirA["«interface»<br>Directions Adapter"]
-    GeoA["«interface»<br>Geocoding Adapter"]
+    Db["«service - Layer 4»<br>Relational DB with Geo Extension"]
+    Files["«service - Layer 4»<br>File Storage"]
+    EmailA["«interface - Layer 4»<br>Email Adapter"]
+    DrugA["«interface - Layer 4»<br>Drug Reference Adapter"]
+    PosA["«interface - Layer 4»<br>POS Feed Connector"]
+    LicA["«interface - Layer 4»<br>License Check Adapter"]
+    DirA["«interface - Layer 4»<br>Directions Adapter"]
+    GeoA["«interface - Layer 4»<br>Geocoding Adapter"]
 
     %% Users and accounts
     Account ---|"1 / 0..1<br>acts-as"| Staff
@@ -64,7 +65,10 @@ flowchart TD
 
     %% Background jobs and notifications
     Job ---|"0..1 / 0..*<br>triggers"| FeedImport
-    Job ---|"0..1 / 0..*<br>triggers"| Notification
+    Job ---|"0..1 / 0..*<br>triggers / retries"| Notification
+    Job ---|"0..* / 0..*<br>triggers pulls of"| AutoFeed
+    Job ---|"0..* / 0..*<br>checks stale-sync of"| SyncLog
+    Job ---|"0..* / 0..*<br>refreshes"| DrugRef
 
     %% Searching and directions
     Consumer ---|"1 / 0..*<br>performs"| Search
@@ -74,7 +78,7 @@ flowchart TD
     Consumer ---|"0..* / 0..*<br>gets-directions-to"| Pharmacy
 
     %% Security code delivery
-    SecCode ---|"1 / 0..1<br>delivered-by"| Notification
+    SecCode ---|"0..1 / 0..1<br>delivered-by"| Notification
 
     %% Layer 1: who uses which UI
     Consumer -.->|"uses"| ClientApp
@@ -92,6 +96,7 @@ flowchart TD
     RestApi -.->|"routes manual edits"| Listing
     RestApi -.->|"routes uploads"| FeedImport
     RestApi -.->|"routes reviews"| Verification
+    RestApi -.->|"routes registration and profiles"| Pharmacy
     AuthSvc -.->|"authenticates"| Account
     AuthSvc -.->|"issues and checks"| SecCode
 
@@ -104,10 +109,20 @@ flowchart TD
     Verification -.->|"checked-via"| LicA
     Search -.->|"routes-via"| DirA
     Location -.->|"geocoded-via"| GeoA
+    PosA -.->|"1..*<br>connects-to"| Pharmacy
+
+    %% Domain -> Layer 4 (Relational DB with Geo Extension)
+    Account -.->|"stored-in"| Db
+    Pharmacy -.->|"stored-in"| Db
+    Location -.->|"stored-in (geo)"| Db
+    Product -.->|"stored-in"| Db
+    Listing -.->|"stored-in"| Db
+    SyncLog -.->|"stored-in"| Db
+    Job -.->|"stored-in (job table)"| Db
 
     classDef boundary fill:#fef9c3,stroke:#a16207;
     classDef control fill:#ede9fe,stroke:#6d28d9;
     classDef infra fill:#ffedd5,stroke:#c2410c,stroke-dasharray:4 2;
     class ClientApp,Portal,Console boundary;
     class RestApi,AuthSvc control;
-    class Files,EmailA,DrugA,PosA,LicA,DirA,GeoA infra;
+    class Db,Files,EmailA,DrugA,PosA,LicA,DirA,GeoA infra;

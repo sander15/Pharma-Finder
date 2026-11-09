@@ -18,6 +18,24 @@ flowchart TD
     SecCode["Security Code"]
     Job["Scheduled Job"]
 
+    %% Layer 1 UI (boundary)
+    ClientApp["«boundary»<br>Client App"]
+    Portal["«boundary»<br>Pharmacy Portal"]
+    Console["«boundary»<br>Admin Console"]
+
+    %% Layer 2 (control)
+    RestApi["«control»<br>REST API"]
+    AuthSvc["«control»<br>Access and Authentication"]
+
+    %% Layer 4 (storage and adapters)
+    Files["«service»<br>File Storage"]
+    EmailA["«interface»<br>Email Adapter"]
+    DrugA["«interface»<br>Drug Reference Adapter"]
+    PosA["«interface»<br>POS Feed Connector"]
+    LicA["«interface»<br>License Check Adapter"]
+    DirA["«interface»<br>Directions Adapter"]
+    GeoA["«interface»<br>Geocoding Adapter"]
+
     %% Users and accounts
     Account ---|"1 / 0..1<br>acts-as"| Staff
     Account ---|"1 / 0..1<br>acts-as"| Admin
@@ -54,3 +72,42 @@ flowchart TD
     Search ---|"0..* / 0..*<br>returns"| Listing
     Search ---|"0..* / 1<br>originates-at"| Location
     Consumer ---|"0..* / 0..*<br>gets-directions-to"| Pharmacy
+
+    %% Security code delivery
+    SecCode ---|"1 / 0..1<br>delivered-by"| Notification
+
+    %% Layer 1: who uses which UI
+    Consumer -.->|"uses"| ClientApp
+    Staff -.->|"uses"| Portal
+    Admin -.->|"uses"| Console
+
+    %% Layer 1 -> Layer 2
+    ClientApp -.->|"HTTPS requests"| RestApi
+    Portal -.->|"HTTPS requests"| RestApi
+    Console -.->|"HTTPS requests"| RestApi
+    RestApi -.->|"authorizes each call"| AuthSvc
+
+    %% Layer 2 -> domain
+    RestApi -.->|"routes searches"| Search
+    RestApi -.->|"routes manual edits"| Listing
+    RestApi -.->|"routes uploads"| FeedImport
+    RestApi -.->|"routes reviews"| Verification
+    AuthSvc -.->|"authenticates"| Account
+    AuthSvc -.->|"issues and checks"| SecCode
+
+    %% Domain -> Layer 4
+    License -.->|"stored-in"| Files
+    FeedImport -.->|"keeps file copy"| Files
+    Notification -.->|"sent-through"| EmailA
+    DrugRef -.->|"fetched-via"| DrugA
+    AutoFeed -.->|"pulls-via"| PosA
+    Verification -.->|"checked-via"| LicA
+    Search -.->|"routes-via"| DirA
+    Location -.->|"geocoded-via"| GeoA
+
+    classDef boundary fill:#fef9c3,stroke:#a16207;
+    classDef control fill:#ede9fe,stroke:#6d28d9;
+    classDef infra fill:#ffedd5,stroke:#c2410c,stroke-dasharray:4 2;
+    class ClientApp,Portal,Console boundary;
+    class RestApi,AuthSvc control;
+    class Files,EmailA,DrugA,PosA,LicA,DirA,GeoA infra;

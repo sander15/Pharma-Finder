@@ -1,0 +1,107 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+    %% Pharmafind architecture: layered (4 layers + 1 of external systems).
+    %% Assumption: all pharmacy feeds use Pharmafind's standard data format and Pharmafind catalog IDs,
+    %% so incoming data only needs to be validated, not translated. Non-compliant feeds are rejected.
+
+    subgraph L1["LAYER 1 · Presentation (what the client sees)"]
+        CONS["Client App<br/>(mobile + web)<br/><i>search medicines · compare pharmacies ·<br/>directions</i>"]
+        PORTAL["Pharmacy-side Portal<br/><i>manual changes · CSV uploads ·<br/>automatic feed setup · verification status ·<br/>last-sync dashboard</i>"]
+        ADMIN["Admin-side Console<br/><i>review registrations ·<br/>manual license checks</i>"]
+    end
+
+    subgraph L2["LAYER 2 · Interface Management and Security"]
+        API["REST API (entry point API)<br/><i>HTTPS requests · JSON responses ·<br/>rejects malformed input · feed uploads</i>"]
+        AUTH["Access and Authentication<br/><i>logins · user roles · password creation/reset ·<br/>security codes · own-pharmacy data only</i>"]
+    end
+
+    subgraph L3["LAYER 3 · App Logic (backend)"]
+        SEARCH["Search and Compare<br/><i>name match · distance ranking ·<br/>price · presentation · last updated ·<br/>verified badge</i>"]
+        LIST["Product Catalog and Listings<br/><i>product info · stock · price ·<br/>accessibility status</i>"]
+        REG["Pharmacy Account Management<br/>and Verification<br/><i>registration · profiles ·<br/>pending → verified</i>"]
+        NOTIF["Notifications<br/><i>security codes ·<br/>stale-sync alerts</i>"]
+        IMPORT["Feed Import<br/><i>check rows · save listings ·<br/>record last-sync time</i>"]
+        WORKER["Job Scheduler and<br/>Background Worker<br/><i>stale-sync check · POS feed pulls ·<br/>drug info refresh · email retries</i>"]
+    end
+
+    subgraph L4["LAYER 4 · Data and System Services"]
+        DB[("Relational DB with<br/>Geo Extension<br/><i>accounts · pharmacies · products ·<br/>listings · sync logs · job table</i>")]
+        FILES[("File Storage<br/><i>CSV feed files ·<br/>license documents</i>")]
+        subgraph ADAPT["SUBSYSTEM · Integration Adapters (replaceable with mocks)"]
+            A_MAIL["Email"]
+            A_DRUG["Drug<br/>Reference"]
+            A_POS["POS feed<br/>connector"]
+            A_LIC["Pharmacy<br/>License Check"]
+            A_MAP["Directions"]
+            A_GEO["Geocoding"]
+        end
+    end
+
+    subgraph EXT["LAYER 5 · External Systems (from context diagram)"]
+        EMAIL["«system»<br/>Email service<br/>(sync alerts &<br/>security codes)"]
+        DRUG["«system»<br/>Drug reference<br/>database"]
+        POS["«system»<br/>Pharmacy inventory /<br/>POS systems"]
+        LIC["«system»<br/>Pharmacy licensing<br/>registry"]
+        MAP["«system»<br/>Maps & directions<br/>service"]
+        GEO["«system»<br/>Geolocation /<br/>geocoding service"]
+    end
+
+    %% Layer 1 -> Layer 2
+    CONS -->|"HTTPS"| API
+    PORTAL -->|"HTTPS"| API
+    ADMIN -->|"HTTPS"| API
+    API -->|"authorize every call"| AUTH
+
+    %% Layer 2 -> Layer 3
+    API --> SEARCH
+    API --> LIST
+    API --> REG
+    API -->|"uploads / pushes"| IMPORT
+
+    %% Inside Layer 3
+    SEARCH --> LIST
+    IMPORT -->|"save valid rows"| LIST
+    AUTH -->|"send code"| NOTIF
+    WORKER -->|"hand fetched data"| IMPORT
+    WORKER -->|"stale > 24h"| NOTIF
+
+    %% Layer 3 -> Layer 4 (storage)
+    SEARCH --> DB
+    LIST --> DB
+    REG --> DB
+    AUTH --> DB
+    WORKER --> DB
+    IMPORT -->|"file copy"| FILES
+    REG -->|"license docs"| FILES
+
+    %% Layer 3 -> Layer 4 (adapters)
+    NOTIF --> A_MAIL
+    LIST --> A_DRUG
+    WORKER -->|"fetch feeds"| A_POS
+    REG --> A_LIC
+    SEARCH --> A_MAP
+    SEARCH --> A_GEO
+
+    %% Layer 4 -> Layer 5
+    A_MAIL --> EMAIL
+    A_DRUG --> DRUG
+    A_POS -->|"1..*"| POS
+    A_LIC --> LIC
+    A_MAP --> MAP
+    A_GEO --> GEO
+
+    classDef client fill:#fef9c3,stroke:#a16207;
+    classDef api fill:#ede9fe,stroke:#6d28d9;
+    classDef app fill:#dbeafe,stroke:#1e40af;
+    classDef data fill:#dcfce7,stroke:#15803d;
+    classDef adapter fill:#ffedd5,stroke:#c2410c,stroke-dasharray:4 2;
+    classDef ext fill:#f8fafc,stroke:#475569;
+    class CONS,PORTAL,ADMIN client;
+    class API,AUTH api;
+    class SEARCH,LIST,REG,NOTIF,IMPORT,WORKER app;
+    class DB,FILES data;
+    class A_MAIL,A_DRUG,A_POS,A_LIC,A_MAP,A_GEO adapter;
+    class EMAIL,DRUG,POS,LIC,MAP,GEO ext;

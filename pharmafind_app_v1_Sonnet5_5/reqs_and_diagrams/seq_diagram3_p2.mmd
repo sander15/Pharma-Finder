@@ -1,0 +1,71 @@
+sequenceDiagram
+    actor SU as User (searcher)
+    participant C as C: Consumer
+    participant S as S: Search
+    participant L as L: Listing
+    actor U as User (pharmacy manager)
+    participant PH as PH: Pharmacy
+    participant VR as VR: VerificationRequest
+    participant LD as LD: LicenseDocument
+    participant AD as AD: Admin
+    actor AU as User (administrator)
+
+    Note over U,AU: Phase 1 - One-time registration and verification request (onboarding)
+
+    U->>PH: register()
+    PH->>VR: submit()
+    VR->>VR: attachDocument()
+    VR->>LD: upload()
+    LD-->>VR: stored (storagePath)
+    VR-->>PH: status = pending
+    PH-->>U: Registration received (verification pending, listing not live)
+
+    Note over U,AU: Phase 2 - Admin review
+
+    AU->>AD: listPendingRequests()
+    AD-->>AU: pending VerificationRequest(s)
+    AU->>AD: reviewRegistration()
+    AD->>VR: checkWithRegistry()
+    VR->>LD: download()
+    LD-->>VR: license document
+    VR-->>AD: registry result
+
+    opt registry unavailable or inconclusive
+        AD->>AD: checkLicenseManually()
+    end
+
+    alt license valid
+        AU->>AD: approve()
+        AD->>VR: markVerified()
+        Note over VR,PH: Pharmacy verificationStatus becomes verified
+        VR-->>AD: verified
+        AD-->>AU: Registration approved
+    else license invalid
+        AU->>AD: reject()
+        AD->>VR: markRejected()
+        VR-->>AD: rejected (rejectionReason stored)
+        AD-->>AU: Registration rejected
+    end
+
+    Note over SU,AU: Phase 3 - Searcher sees only verified pharmacies, with the verified indicator
+
+    SU->>C: searchMedicine()
+    C->>S: matchProduct(queryText, origin)
+    S->>S: findListings()
+
+    loop each Listing
+        S->>L: isInStock()
+        L->>PH: isVisibleInSearch()
+        PH->>PH: isVerified()
+        alt verified (listing is live)
+            PH-->>L: visible and verified
+            L-->>S: stock, price, lastUpdated, verified indicator
+        else pending or rejected (listing not live)
+            PH-->>L: not visible
+            L-->>S: excluded from results
+        end
+    end
+
+    S->>S: filterVerifiedOnly()
+    S-->>C: results with "verified pharmacy" indicator
+    C-->>SU: results

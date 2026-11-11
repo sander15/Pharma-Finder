@@ -1,0 +1,117 @@
+  
+**Vision statement \#1 (Claude with Sonnet 5):**
+
+An app for patients, caregivers, and everyday healthcare consumers who need to find a specific pharmaceutical product quickly and compare where to buy it before spending time or money traveling to a pharmacy; Pharma Finder is a mobile and web application that lets users search for a medicine by name and instantly see every registered pharmacy that currently stocks it — with each result showing the product's general information alongside pharmacy-specific details such as its presentation (dosage form, strength, or pack size, among other data points) and price. Unlike checking individual pharmacy websites one at a time or calling around town, our product aggregates availability, product information, and pricing from all registered pharmacies into a single search, letting users compare results side by side and choose where to go before leaving home.
+
+Registered pharmacies are the secondary target users for Pharma Finder, as participation drives foot traffic and sales for products they already carry, at no cost beyond keeping their stock and pricing data current. Consumers benefit from faster access to needed medication and price transparency, particularly for chronic or urgent prescriptions where availability varies by location. Consumers with disabilities benefit especially, since they can confirm a pharmacy actually carries what they need before making a trip, avoiding the physical burden and wasted effort of traveling somewhere only to find the product unavailable.
+
+**Model \#1 Analysis:**  
+Claude with Sonnet 5 was quite encompassing with its initial draft, though it did follow the book’s template in a more rigid manner instead of fully adapting it to the text and understanding that not every word of the template has to be there if the idea is correctly communicated(for instance, it insisted in writing “THE Pharma Finder is a…” instead of “Pharma Finder is a mobile and web application…”). Also, this is a product meant to improve accessibility in healthcare, and the model initially didn’t mention disabled people in the second paragraph(where stakeholders are mentioned). This is somewhat understandable from the model for generalization purposes, but an important point of pharmaceutical products is that many users are, in fact, plausibly reduced in movement(either temporarily or permanently), and thus, we shouldn’t gloss over this demographic. Outside of these observations, the model produced a strong outcome after some draft comments. The model successfully understood the product concept and its goals without an extremely descriptive prompt, and yielded an acceptable vision after fewer drafts than model \#2(Deepseek V3, seen later).
+
+**Persona Definitions \#1**
+
+**Persona 1, Lily:**  
+Lily is a 33-year-old full-time office administrator who lives in a mid-sized city with her partner and 2 young children. She grew up in this town and possesses no formal technological training beyond ordinary school computing classes, but she is more avid with her smartphone, regularly using social media, banking, and shopping apps. She tries to squeeze in errands in the short time she has between leaving work and picking up her kids from school.  
+Lily would be a casual user of Pharma Finder, using it to regularly search for over-the-counter medicines and common medicines prescribed to her family(e.g. cold medicine, antibiotics, antihistamines, etc). This way, Lily can confirm that a nearby pharmacy has a certain item in stock and check the price before she detours there. She isn’t interested in advanced filtering or complex functionalities; she wants a quick search that provides a short list of nearby options that hold enough product information to be confident that it is the right item.
+
+**Persona 2, Daniel:**  
+Daniel, age 25, has been a wheelchair user since he was 20 years old following a spinal injury. He lives alone in a suburban apartment with limited access to public transit. He manages a chronic condition requiring regular medication and possesses moderate technical skills(especially in his desktop computer and smartphone). Daniel relies heavily on his phone for tasks that let him avoid unnecessary physical trips, since traveling any distance takes extra planning and effort.  
+For Daniel, Pharma Finder wouldn’t be a luxurious convenience, it would be closer to a necessity. Before visiting any pharmacy, he needs certainty that his needed medication is actually in stock and in the right presentation/dosage, since an unsuccessful trip is a significant cost(both physical and time-wise). He’s very likely to compare product details per-pharmacy instead of only a yes/no stock indicator, and he would value the app eventually being able to inform him which pharmacies are wheelchair accessible.
+
+**Persona 3, Patricia:**  
+Patricia is a 40-year-old woman that manages a single independent pharmacy that has been registered on Pharma Finder for a year. She has a pharmacy degree and many years of retail experience, but only moderate comfort with software beyond the inventory and point-of-sale systems she is accustomed to using on a daily basis. She expects a software tool to be relatively simple and low maintenance.  
+Patricia would use Pharma Find as a supply-side user, responsible for keeping her pharmacy’s stock and product information accurate so that customers who find her products in Pharma Finder actually get a realistic representation of what the pharmacy offers.
+
+**Pharmaceutical Product Finder, 1-Pagers(based in Product Vision \#1 and Persona Definitions \#1):**
+
+## **1\. Pharma Finder \- Consumer Search 1-pager**
+
+### **Problem**
+
+A user who needs a specific medicine opens Pharma Finder before heading out. They search by product name and see which nearby, registered pharmacies have it in stock, with each result showing presentation, dosage, and price so they can be confident it's the right item before they leave. A busy parent fitting errands into the short window between work and picking up their kids uses this to add a pharmacy stop with confidence, instead of guessing which one to try first.
+
+For a user with limited mobility or a chronic condition requiring regular medication, that certainty matters even more: traveling any distance takes extra planning, so a wasted trip to a pharmacy that didn't actually have the right presentation in stock costs real time and effort, not just convenience. This user is less likely to accept a simple yes/no stock indicator, more likely to compare exact product details per pharmacy, and would value knowing in advance which pharmacy locations are wheelchair-accessible. The goal in both cases is the same: a short, trustworthy list of nearby options with enough product detail that the user never needs to call ahead or make a trip in vain.
+
+### **Assumptions**
+
+* Only pharmacies that have registered and opted-in appear in search results.  
+* "Availability" reflects each pharmacy's last reported stock update, not a live, real-time inventory feed; initial release tolerates data up to \~24 hours old without being labeled in results as “stale data” or “likely out of date” .  
+* The initial release covers a single city or region with a known, finite list of registered pharmacies, not statewide or nationwide coverage.  
+* Users search by product name (brand or generic); matching against active ingredient or alternate brand names is a stretch goal, not an instant requirement.  
+* No online purchasing or product reservation is available for now; the app only surfaces availability, presentation, and price; the user still buys in person.  
+* Price shown is the pharmacy's listed retail price and may not reflect insurance coverage, discounts, or prescription-specific adjustments.
+
+### **Functional Requirements**
+
+1. **As a user**, I want to search for a medicine by name so that I can quickly see which nearby pharmacies have it before I leave work.  
+   * Search returns results ranked by distance from the user's current or entered location.  
+   * Each result shows the pharmacy name, stock status, price, and presentation at a glance, with no extra taps required.  
+2. **As a disabled user**, I want to confirm the exact presentation and dosage a pharmacy has in stock so that I don't travel somewhere only to find the wrong item or nothing at all.  
+   * Results clearly distinguish between presentations (tablet vs. syrup, different strengths, etc) rather than a single yes/no stock flag.  
+   * Results optionally flag whether a pharmacy location is wheelchair-accessible, when that data is available.
+
+### **Non-Functional Requirements**
+
+* **Performance:** search results return in under 5 seconds for a region with up to a few hundred registered pharmacies.  
+* **Data recency:** pharmacy stock/price data is displayed without a stale data label if it is no more than 24 hours old, with a visible "last updated" indicator per result. pharmacy stock/price data that is more than 24 hours can be shown, but should be labeled as “stale data” or “likely out of date”, also with a “last updated” indicator.  
+* **Availability:** the search service targets 99% uptime(\~15 minutes of downtime per day), since users may be relying on it before a time-sensitive pharmacy visit.
+
+### **Requirements Sizing (Fibonacci Sequence 1, 2, 3, 5, 8, …)**
+
+| \# | Story | Pts | Rationale |
+| ----- | ----- | ----- | ----- |
+| 1 | Search by name, rank by distance | 5 | Core search logic, distance ranking against pharmacy locations, and the underlying availability data model the rest of the product depends on(stock indicator, product price, etc). |
+| 2 | Confirm exact presentation/dosage in stock | 2 | Surfaces presentation/dosage fields already captured per pharmacy(no new data source). |
+| 3 | Accessibility flag on pharmacy locations | 3 | Adds an accessibility attribute to the pharmacy location data plus a filter/display flag; independent of the core search story. |
+|  | **Total** | 10 |  |
+
+## **2\. Pharma Finder \- Pharmacy Data Management 1-pager**
+
+### **Problem**
+
+An independent pharmacy manager who has registered her pharmacy on Pharma Finder needs to keep her stock and price listings accurate without taking on a second system to maintain. She already runs inventory and point-of-sale systems every day and has only moderate comfort with software beyond those tools, so any update process has to be simple and fit alongside what she already does, not duplicate it.
+
+Their main concerns are the manual effort required to update each product's information, whether the process integrates with her existing workflow instead of replacing it, and whether being listed on Pharma Finder actually translates into real foot traffic and sales. The goal is a listing that takes as little extra work as possible to keep current, because its accuracy is what every customer searching on the other end of the app depends on.
+
+### **Assumptions**
+
+* Pharmacies must actively register and agree to report stock and price data; Pharma Finder cannot show a pharmacy that hasn't opted in.  
+* Registering (opting in and agreeing to report data) and verification (confirming a registrant is a legitimate, licensed pharmacy) are separate steps. A pharmacy can submit a registration before it has been verified, but its listing does not go live or appear in search until verification is complete.  
+* Stock and price data is directly reported by each pharmacy’s system (via a portal, API, etc) rather than scraped, and each pharmacy is responsible for keeping it reasonably updated.  
+* Update lags of up to \~24 hours are accepted.  
+* The update mechanism must fit alongside a pharmacy's existing inventory/point-of-sale workflow rather than replace it(pharmacies won't adopt a tool that means entering data twice as much).  
+* Each pharmacy's reported data is reduced to that pharmacy specifically(no pharmacy can alter another's listing).  
+* Initial release targets a single city or region with a known, finite list of registered pharmacies.
+
+### **Functional Requirements**
+
+1. **As an independent pharmaceutical manager**, I want to update my pharmacy's stock and pricing data with minimal manual effort so that my listing stays accurate without duplicating work I already do in my inventory system.  
+   * A simple portal or feed-based update mechanism, not a full redesign of an independent pharmaceutical manager’s existing workflow.  
+   * Support for both manual entry (small pharmacies) and automated feed (pharmacies with compatible point-of-sale systems).  
+2. **As an independent pharmaceutical manager**, I want to see confirmation of when my data was last updated and how it appears to searchers so that I can trust my listing is accurate and potentially catch problems.  
+   * A simple dashboard showing last-sync time and a preview of the current public listing.  
+   * An alert if her data hasn't synced within the expected update window/lag.  
+3. **As an independent pharmaceutical manager**, I want my pharmacy's registration to be verified before my listing goes live so that customers can trust my pharmacy.  
+   * A one-time verification step during onboarding (business registration, license check, etc).  
+   * A visible "verified pharmacy" indicator shown to searchers.
+
+### **Non-Functional Requirements**
+
+* **Security:** pharmacy-reported pricing/stock data is authenticated per-pharmacy to prevent one pharmacy from altering another's listing.  
+* **Data recency:** pharmacy stock/price data is displayed without a stale data label if it is no more than 24 hours old, with a visible "last updated" indicator per result. pharmacy stock/price data that is more than 24 hours can be shown, but should be labeled as “stale data” or “likely out of date”, also with a “last updated” indicator. The update mechanism will support more frequent syncing as pharmacies adopt it.  
+* **Usability:** the update mechanism (portal or feed setup) should be usable by pharmacy staff without technical training, consistent with Patricia’s moderate technical comfort.  
+* **Reliability:** a failed or delayed feed sync is surfaced to the pharmacy via notifications, so stale listings don't go unnoticed.
+
+### **Requirements Sizing (Fibonacci Sequence 1, 2, 3, 5, 8, …)**
+
+| \# | Story | Pts | Rationale |
+| ----- | ----- | ----- | ----- |
+| 1 | Per-pharmacy access control for listing changes | 1 | An update request is checked so a manager can only change her own pharmacy’s data. |
+| 2 | Manual stock and price entry in the portal | 2 | A simple editor with validation (positive price, whole-number stock) and a saved confirmation or error.  |
+| 3 | CSV upload with row validation and import summary | 3 | Parsing the file, checking each row (price, stock, catalog ID) and saving the valid rows. Keeps a copy of the file, records the sync time, and shows accepted and rejected row counts.  |
+| 4 | Connect and enable an automatic POS feed | 2 | The manager enters the POS endpoint and interval, and the system tests the connection, enables the feed, and schedules it. A failed connection gives a clear error. |
+| 5 | Scheduled pull of POS data into the import pipeline | 3 | A background job fetches stock and prices on the schedule and passes them through story 3’s import. |
+| 2 | Last-updated confirmation dashboard | 2 | A straightforward read-only view built on data the update mechanism already captures. |
+| 3 | Pharmacy registration verification before going live | 5 | Requires a one-time onboarding verification step and a "verified pharmacy" indicator in search results; moderate effort relative to the ongoing syncing work. |
+|  | **Total** | 18 |  |
+

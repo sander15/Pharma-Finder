@@ -1,50 +1,138 @@
 sequenceDiagram
-    actor U as User
-    participant C as C: Consumer
-    participant S as S: Search
-    participant P as P: Product
-    participant L as L: Listing
+    autonumber
+    actor U as Pharmacy Manager
+    participant PS as PS: PharmacyStaff
+    participant PP as PP: PharmacyPortal
+    participant API as API: RestApi
+    participant AUTH as AUTH: AccessAndAuthentication
+    participant ACC as ACC: Account
     participant PH as PH: Pharmacy
-    participant OL as OL: Location (origin)
-    participant PL as PL: Location (pharmacy)
+    participant POSC as POSC: PosFeedConnector
+    participant AF as AF: AutomaticFeed
+    participant JOB as JOB: ScheduledJob
+    participant FI as FI: FeedImport
+    participant LST as LST: Listing
+    participant SL as SL: SyncLog
+    participant FS as FS: FileStorage
+    participant DB as DB: RelationalDbGeo
 
-    U->>C: setLocation()
-    U->>C: searchMedicine()
-    C->>S: matchProduct(queryText, origin)
-    S->>OL: toCoordinates()
-    OL-->>S: origin coordinates
-    S->>P: matchesName(queryText)
-    P-->>S: matching Product(s) (each with its own presentation and dosage)
+    alt Option 1: manual entry in the portal (small pharmacies)
+        U->>PS: updateListing (listingId, newStock, newPrice)
+        PS->>PP: showListingEditor ()
+        PP->>API: receiveRequest (pharmacyId, listingId, newStock, newPrice)
+        API->>API: validateInput ()
+        API->>AUTH: authorize (request)
+        AUTH->>AUTH: checkPharmacyScope ()
+        AUTH->>ACC: canAccessPharmacy (pharmacyId)
+        ACC-->>AUTH: yes or no
 
-    alt no product matched
-        S-->>C: Empty result (no pharmacies found)
-        C-->>U: No pharmacies found
-    else product matched
-        S->>S: findListings()
-
-        loop each matching Product (one per presentation and dosage)
-            S->>P: getListings()
-            P-->>S: Listing(s) for that presentation and dosage
-
-            loop each Listing
-                S->>L: isInStock()
-                L->>PH: isVisibleInSearch()
-                PH->>PH: isVerified()
-                PH->>PL: distanceTo(origin coordinates)
-                PL-->>PH: distance
-                PH-->>L: visibility, distance, pharmacy name, isAccessible flag
-                L-->>S: stock status, price, lastUpdated, pharmacy data
+        alt manager is editing her OWN pharmacy
+            AUTH-->>API: authorized
+            API->>API: routeRequest ()
+            API->>LST: validate (newStock, newPrice)
+            LST-->>API: valid or invalid
+            alt values are valid
+                API->>LST: updateStock (newStock)
+                API->>LST: updatePrice (newPrice)
+                LST->>DB: save (listing, lastUpdated = now)
+                DB-->>LST: saved
+                LST-->>API: listing updated
+                API-->>PP: sendJsonResponse (saved)
+                PP->>PP: showListingEditor (saved)
+            else values are invalid
+                API-->>PP: sendJsonResponse (error: price or stock not valid)
+                PP->>PP: showListingEditor (error message)
             end
+        else request targets another pharmacy
+            AUTH-->>API: denied
+            API-->>PP: sendJsonResponse (error: access denied)
+            PP->>PP: showListingEditor (error message)
+        end
+        PP-->>PS: editor updated
+        PS-->>U: saved or error message
+
+    else Option 2: file import or automatic feed (pharmacies with an inventory or POS system)
+
+        alt Option 2a: the manager uploads a CSV exported from her system
+            U->>PS: uploadCsv (csvFile)
+            PS->>PP: showCsvUpload ()
+            PP->>API: receiveRequest (pharmacyId, csvFile)
+            API->>API: validateInput ()
+            API->>AUTH: authorize (request)
+            AUTH-->>API: authorized (own pharmacy only, same scope check as Option 1)
+            API->>API: routeRequest ()
+            API->>FI: validateRows (csv rows)
+
+        else Option 2b: automatic feed pulled from her POS system
+            opt first time only: the manager connects her POS system
+                U->>PS: configureAutomaticFeed (posEndpoint, intervalMinutes)
+                PS->>PP: showFeedSetup ()
+                PP->>API: receiveRequest (pharmacyId, posEndpoint, intervalMinutes)
+                API->>API: validateInput ()
+                API->>AUTH: authorize (request)
+                AUTH-->>API: authorized (own pharmacy only, same scope check as Option 1)
+                API->>API: routeRequest ()
+                API->>PH: updateProfile (feed settings)
+                PH->>AF: testConnection ()
+                AF->>POSC: testConnection ()
+                POSC-->>AF: connection result
+                alt connection works
+                    PH->>AF: enable ()
+                    AF->>JOB: schedule (intervalMinutes)
+                    JOB->>DB: save (job table entry)
+                    DB-->>JOB: saved
+                    JOB-->>AF: scheduled
+                    AF-->>PH: feed enabled
+                    PH-->>API: feed ready
+                else connection fails
+                    AF-->>PH: connection failed
+                    PH-->>API: feed not enabled
+                end
+                API-->>PP: sendJsonResponse (feed status)
+                PP->>PP: showFeedSetup (feed status)
+                PP-->>PS: feed status shown
+                PS-->>U: feed connected or error message
+            end
+
+            Note over JOB,AF: Later, with nobody clicking anything, the scheduler runs by itself
+            JOB->>JOB: isDue ()
+            JOB->>JOB: execute ()
+            JOB->>JOB: pullPosFeeds ()
+            JOB->>AF: fetchLatestData ()
+            AF->>POSC: pullFeed ()
+            POSC-->>AF: stock and price rows (standard format)
+            AF-->>JOB: feed rows
+            JOB->>FI: validateRows (feed rows)
         end
 
-        S->>S: filterVerifiedOnly()
-
-        opt needsAccessibleAccess is true
-            S->>S: filterAccessible()
+        %% ---- Both file-based paths now share the same FeedImport steps ----
+        FI->>FI: validatePrice ()
+        FI->>FI: validateStock ()
+        FI->>FI: validateCatalogId ()
+        Note over FI: Bad rows are rejected, never fixed. Feeds must already use the standard format and catalog IDs
+        FI->>FI: saveValidRows ()
+        loop for each valid row
+            FI->>LST: updateStock (newStock)
+            FI->>LST: updatePrice (newPrice)
+            LST->>DB: save (listing, lastUpdated = now)
+            DB-->>LST: saved
         end
+        FI->>FI: storeFileCopy ()
+        FI->>FS: store (file copy)
+        FS-->>FI: storedFilePath
+        FI->>FI: recordSyncTime ()
+        FI->>SL: record (success, validRows, rejectedRows)
+        SL->>DB: save (sync log)
+        DB-->>SL: saved
 
-        S->>S: rankByDistance()
-        S-->>C: Results grouped by presentation and dosage
-        C-->>U: Stock per pharmacy, accessibility flag, last updated
-        U->>C: compareResults()
+        alt the import came from a CSV upload
+            FI-->>API: import result (validRows, rejectedRows)
+            API-->>PP: sendJsonResponse (import result)
+            PP->>PP: showCsvUpload (rows accepted, rows rejected)
+            PP-->>PS: result shown
+            PS-->>U: how many rows were accepted and rejected
+        else the import came from the automatic feed
+            FI-->>JOB: import result
+            Note over JOB: Nobody is waiting for a reply. The manager sees the new sync time on her dashboard (Story 2)
+        end
     end

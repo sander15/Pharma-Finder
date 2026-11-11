@@ -352,7 +352,7 @@ classDiagram
     Pharmacy "1" -- "0..*" FeedImport : submits
     AutomaticFeed "0..1" -- "0..*" FeedImport : produces
     FeedImport "0..*" -- "0..*" Listing : updates
-    FeedImport "1" -- "1" SyncLog : recorded-in
+    FeedImport "0..1" -- "1" SyncLog : recorded-in
     Pharmacy "1" -- "0..*" SyncLog : synced-by
 
     %% Background jobs and notifications
@@ -410,4 +410,4 @@ classDiagram
     Product ..> RelationalDbGeo : stored-in
     Listing ..> RelationalDbGeo : stored-in
     SyncLog ..> RelationalDbGeo : stored-in
-    ScheduledJob ..> RelationalDbGeo : stored-in (job table)
+    ScheduledJob ..> RelationalDbGeo : stored-in (job table)

@@ -1,74 +1,105 @@
 sequenceDiagram
-    actor U as User (pharmacy manager)
-    participant A as A: Account
+    autonumber
+    actor U as Pharmacy Manager
     participant PS as PS: PharmacyStaff
+    participant PP as PP: PharmacyPortal
+    participant API as API: RestApi
+    participant AUTH as AUTH: AccessAndAuthentication
+    participant ACC as ACC: Account
     participant PH as PH: Pharmacy
-    participant L as L: Listing
+    participant LST as LST: Listing
+    participant DB as DB: RelationalDbGeo
     participant SL as SL: SyncLog
-    participant FI as FI: FeedImport
-    participant SJ as SJ: ScheduledJob
-    participant N as N: Notification
+    participant JOB as JOB: ScheduledJob
+    participant NTF as NTF: Notification
+    participant EA as EA: EmailAdapter
 
-    Note over U,N: Part A - Dashboard (last-sync time and preview of the public listing)
+    Note over U,PS: The manager is already logged in
 
-    U->>A: login()
-    A-->>U: authenticated session
-    U->>PS: viewLastSync()
-    PS->>A: hasPermission()
-    A-->>PS: permission result
-    PS->>A: canAccessPharmacy()
-    A-->>PS: own pharmacy only
-    break access denied
-        PS-->>U: Error (no access to this pharmacy)
-    end
-
-    PS->>PH: isSyncStale()
-    PH->>SL: getLatestFor()
-    SL-->>PH: latest sync (syncedAt, success)
-    PH->>SL: isOlderThan(24 hours)
+    %% ---------- Part 1: when was my data last updated? ----------
+    U->>PS: viewLastSync ()
+    PS->>PP: showSyncDashboard ()
+    PP->>API: receiveRequest (pharmacyId)
+    API->>API: validateInput ()
+    API->>AUTH: authorize (request)
+    AUTH->>AUTH: checkPharmacyScope ()
+    AUTH->>ACC: canAccessPharmacy (pharmacyId)
+    ACC-->>AUTH: yes (own pharmacy)
+    AUTH-->>API: authorized
+    API->>API: routeRequest ()
+    API->>PH: isSyncStale ()
+    PH->>SL: getLatestFor (pharmacy)
+    SL->>DB: query (latest sync log of this pharmacy)
+    DB-->>SL: latest sync log
+    SL-->>PH: last sync time and result
+    PH->>SL: isOlderThan (24 hours)
     SL-->>PH: true or false
-    PH-->>PS: last-sync time and stale flag
-
-    PS->>PH: isVisibleInSearch()
-    PH->>PH: isVerified()
-    PH-->>PS: live status and verified badge
-
-    PS->>PH: getListings()
-    loop each Listing
-        PH->>L: isInStock()
-        L-->>PH: stock status, price, lastUpdated
+    PH-->>API: lastSyncAt, isStale
+    API-->>PP: sendJsonResponse (lastSyncAt, isStale)
+    alt data synced within the last 24 hours
+        PP->>PP: showSyncDashboard (last sync time, status OK)
+    else data is stale
+        PP->>PP: showSyncDashboard (last sync time, warning banner)
     end
-    PH-->>PS: public listing preview
-    PS-->>U: Dashboard (last-sync time, stale alert, public listing preview)
+    PP-->>PS: dashboard shown
+    PS-->>U: last sync time and status
 
-    Note over U,N: Part B - Stale-sync alert (background, no user action)
+    %% ---------- Part 2: how does my listing look to searchers? ----------
+    U->>PS: previewPublicListing ()
+    PS->>PP: showListingPreview ()
+    PP->>API: receiveRequest (pharmacyId)
+    API->>API: validateInput ()
+    API->>AUTH: authorize (request)
+    AUTH-->>API: authorized (own pharmacy only, same scope check as Part 1)
+    API->>API: routeRequest ()
+    API->>PH: getListings ()
+    PH->>DB: query (listings of this pharmacy)
+    DB-->>PH: listing records
+    PH->>PH: isVisibleInSearch ()
+    PH->>PH: isVerified ()
+    loop for each listing of this pharmacy
+        PH->>LST: isInStock ()
+        LST-->>PH: stock status
+    end
+    PH-->>API: listings as searchers see them (stock status, price, lastUpdated, verified or not)
+    API-->>PP: sendJsonResponse (public preview)
+    PP->>PP: showListingPreview (public preview)
+    PP-->>PS: preview shown
+    PS-->>U: what searchers will see
 
-    SJ->>SJ: isDue()
-    SJ->>SJ: execute()
-    SJ->>SJ: checkStaleSync()
-    SJ->>FI: «triggers»
-    FI->>PH: isSyncStale()
-    PH->>SL: getLatestFor()
-    SL-->>PH: latest sync (syncedAt, success)
-    PH->>SL: isOlderThan(24 hours)
-    SL-->>PH: true or false
-    PH-->>FI: stale flag
-    FI-->>SJ: stale flag
-
-    alt sync older than 24 hours
-        SJ->>N: «triggers»
-        N->>N: compose()
-        N->>N: send()
-        alt email sent
-            N-->>A: stale-sync alert addressed to the pharmacy account
-            A-->>U: Email: data has not synced within the expected window
-        else email failed
-            N->>N: markFailed()
-            SJ->>SJ: retryFailedEmails()
-            SJ->>N: retry()
-            N-->>A: stale-sync alert addressed to the pharmacy account
-            A-->>U: Email: data has not synced within the expected window
+    %% ---------- Part 3: automatic alert when a sync is late (runs in the background) ----------
+    Note over JOB: This part runs on its own. The manager does not click anything
+    JOB->>JOB: isDue ()
+    alt the stale-sync job is due
+        JOB->>JOB: execute ()
+        JOB->>JOB: checkStaleSync ()
+        loop for each pharmacy
+            JOB->>SL: getLatestFor (pharmacy)
+            SL->>DB: query (latest sync log of this pharmacy)
+            DB-->>SL: latest sync log
+            SL-->>JOB: last sync time
+            JOB->>SL: isOlderThan (24 hours)
+            SL-->>JOB: true or false
+            opt last sync is older than 24 hours
+                JOB->>NTF: compose (stale-sync alert for the pharmacy account)
+                NTF-->>JOB: message ready
+                JOB->>NTF: send ()
+                NTF->>EA: sendEmail (alert)
+                alt email accepted
+                    EA-->>NTF: sent
+                    Note over EA: The email service delivers the alert to the manager's inbox
+                else email failed
+                    EA-->>NTF: failed
+                    NTF->>NTF: markFailed ()
+                end
+            end
         end
-    else sync is fresh
-        Note over SJ,FI: No action needed
+    end
+
+    %% ---------- Part 4: failed emails are tried again so no alert gets lost ----------
+    JOB->>JOB: retryFailedEmails ()
+    opt a previous alert is marked as failed
+        JOB->>NTF: retry ()
+        NTF->>EA: sendEmail (alert)
+        EA-->>NTF: sent
     end

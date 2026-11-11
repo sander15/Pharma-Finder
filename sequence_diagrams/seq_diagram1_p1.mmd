@@ -1,42 +1,96 @@
 sequenceDiagram
+    autonumber
     actor U as User
     participant C as C: Consumer
+    participant CA as CA: ClientApp
+    participant API as API: RestApi
+    participant AUTH as AUTH: AccessAndAuthentication
     participant S as S: Search
+    participant OL as OL: Location (search origin)
+    participant GEO as GEO: GeocodingAdapter
     participant P as P: Product
-    participant L as L: Listing
+    participant LST as LST: Listing
     participant PH as PH: Pharmacy
-    participant OL as OL: Location (origin)
     participant PL as PL: Location (pharmacy)
+    participant DB as DB: RelationalDbGeo
 
-    U->>C: setLocation()
-    U->>C: searchMedicine()
-    C->>S: matchProduct(queryText, origin)
-    S->>OL: toCoordinates()
-    OL-->>S: origin coordinates
-    S->>P: matchesName(queryText)
-    P-->>S: matching Product(s)
+    %% ---------- Part 1: the user tells the app where they are ----------
+    U->>C: setLocation (GPS or typed address)
+    C->>CA: requestLocationPermission ()
+    alt user allows GPS
+        CA-->>C: current coordinates
+    else user denies GPS
+        CA-->>C: no GPS, keep the typed address
+    end
+    Note over C: Consumer keeps the answer in its currentLocation attribute
 
-    alt no product matched
-        S-->>C: Empty result (no pharmacies found)
-        C-->>U: No pharmacies found
-    else product matched
-        S->>S: findListings()
-        S->>P: getListings()
-        P-->>S: Listing(s)
+    %% ---------- Part 2: the user searches for a medicine ----------
+    U->>C: searchMedicine (medicineName)
+    C->>CA: showSearchForm ()
+    CA->>API: receiveRequest (medicineName, currentLocation)
+    API->>API: validateInput ()
 
-        loop each Listing
-            S->>L: isInStock()
-            L->>PH: isVisibleInSearch()
-            PH->>PH: isVerified()
-            PH->>PL: distanceTo(origin coordinates)
-            PL-->>PH: distance
-            PH-->>L: visibility, distance, pharmacy name
-            L-->>S: stock status, price, lastUpdated, pharmacy data
+    alt request is malformed
+        API-->>CA: sendJsonResponse (error: invalid input)
+        CA->>CA: showResults (error message, ask user to retype)
+    else request is valid
+        API->>AUTH: authorize (request)
+        AUTH-->>API: authorized (consumers can search without logging in)
+        API->>API: routeRequest ()
+        API->>S: matchProduct (medicineName, origin)
+
+        %% --- Step A: find the product the user typed ---
+        S->>P: matchesName (medicineName)
+        P->>DB: query (brandName or genericName like medicineName)
+        DB-->>P: matching product record
+        P-->>S: matched Product (presentation, dosage)
+
+        %% --- Step B: turn the user's location into coordinates ---
+        S->>OL: toCoordinates ()
+        alt user typed an address
+            OL->>GEO: geocode (address)
+            GEO-->>OL: latitude, longitude
+        else GPS coordinates already known
+            Note over OL: nothing to geocode
+        end
+        OL-->>S: origin coordinates
+
+        %% --- Step C: find every listing (pharmacy stock + price) for that product ---
+        S->>S: findListings ()
+        S->>P: getListings ()
+        P->>DB: query (listings of this product)
+        DB-->>P: listing records
+        P-->>S: listings (stock, price, lastUpdated)
+
+        %% --- Step D: for each listing ask the Listing, which asks its Pharmacy, which asks its Location ---
+        loop for each listing found
+            S->>LST: isInStock ()
+            LST->>PH: isVisibleInSearch ()
+            PH->>PH: isVerified ()
+            alt pharmacy is verified
+                PH->>PL: distanceTo (origin coordinates)
+                PL->>DB: geoQuery (pharmacy coordinates, origin coordinates)
+                DB-->>PL: distance in km
+                PL-->>PH: distance in km
+                PH-->>LST: visible (pharmacy name, distance)
+            else pharmacy is not verified
+                PH-->>LST: hidden
+            end
+            LST-->>S: stock status, price, lastUpdated, pharmacy info
         end
 
-        S->>S: filterVerifiedOnly()
-        S->>S: rankByDistance()
-        S-->>C: Results ranked by distance
-        C-->>U: Results (name, stock, price, presentation, last updated)
-        U->>C: compareResults()
+        %% --- Step E: Search cleans up and sorts what it collected ---
+        S->>S: filterVerifiedOnly ()
+        S->>S: rankByDistance ()
+        S-->>API: results sorted nearest first
+        API-->>CA: sendJsonResponse (ranked results)
+
+        alt at least one pharmacy has the medicine
+            CA->>CA: showResults (pharmacy name, stock status, price, presentation)
+        else no nearby pharmacy has it
+            CA->>CA: showResults (no pharmacies found)
+        end
     end
+
+    CA-->>C: results displayed
+    C-->>U: nearby pharmacies ranked by distance

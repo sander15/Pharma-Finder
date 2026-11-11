@@ -82,7 +82,8 @@ export class ListingService {
     if (!existing || existing.pharmacy !== pharmacyId) throw new AppError("NOT_FOUND", "Listing not found");
     const { stock, price } = validateStockAndPrice(stockIn, priceIn);
     const saved = this.save(pharmacyId, existing.product, stock, price);
-    this.pharmacies.recordSync(pharmacyId, null, true, `Manual update of ${existing.product}`);
+    // A manual save also counts as a sync (SyncLog without a FeedImport), so the stale-sync check does not flag hand-updating managers.
+    this.pharmacies.recordSync(pharmacyId, null, true, `Manual entry: updated ${existing.product}`);
     return this.toItem(saved, this.catalog.getProduct(existing.product)!);
   }
 
@@ -92,7 +93,7 @@ export class ListingService {
     if (this.get(listingIdFor(pharmacyId, catalogId))) throw new AppError("CONFLICT", "This product is already listed; edit the existing listing");
     const { stock, price } = validateStockAndPrice(stockIn, priceIn);
     const saved = this.save(pharmacyId, catalogId, stock, price);
-    this.pharmacies.recordSync(pharmacyId, null, true, `Manual listing of ${catalogId}`);
+    this.pharmacies.recordSync(pharmacyId, null, true, `Manual entry: added ${catalogId}`);
     return this.toItem(saved, product);
   }
 }

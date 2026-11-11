@@ -572,6 +572,74 @@ describe("Manual listing editor", () => {
     expect(d.body.data.isStale).toBe(false);
     expect(d.body.data.lastSyncAt).toBe(app.clock.iso());
   });
+
+  /* Sequence diagram 2 (option 1): API->>SL: record (success, source = manual entry, no feed import);
+   * class diagrams: FeedImport "0..1" -- "1" SyncLog, so a SyncLog may exist without a FeedImport. */
+  const logsOf = (ph: string) => app.db.query<any>("syncLogs", (l) => l.pharmacy === ph);
+  const importsOf = (ph: string) => app.db.query<any>("feedImports", (i) => i.pharmacy === ph);
+
+  it("a manual save writes exactly one successful SyncLog, marked as manual entry, with no feed import", async () => {
+    const token = await staff("hubcity");
+    const logsBefore = logsOf("ph-hubcity").length;
+    const importsBefore = importsOf("ph-hubcity").length;
+    app.clock.advance(2 * HOUR);
+    expect((await put(token, "lst-ph-hubcity-PF-10001", { stock: 7, price: 10.25 })).status).toBe(200);
+    const logs = logsOf("ph-hubcity");
+    expect(logs.length).toBe(logsBefore + 1);
+    const newest = logs.reduce((a: any, b: any) => (a.syncedAt >= b.syncedAt ? a : b));
+    expect(newest).toMatchObject({ pharmacy: "ph-hubcity", feedImport: null, success: true, syncedAt: app.clock.iso() });
+    expect(newest.details.toLowerCase()).toContain("manual entry");
+    expect(importsOf("ph-hubcity").length).toBe(importsBefore); // no FeedImport is created for manual saves
+  });
+  it("adding a listing by hand is also a manual-entry sync", async () => {
+    const token = await staff("hubcity");
+    const before = logsOf("ph-hubcity").length;
+    await call("POST", "/api/portal/ph-hubcity/listings", { token, body: { catalogId: "PF-10009", stock: 4, price: 9.5 } });
+    const logs = logsOf("ph-hubcity");
+    expect(logs.length).toBe(before + 1);
+    const newest = logs.reduce((a: any, b: any) => (a.syncedAt >= b.syncedAt ? a : b));
+    expect(newest).toMatchObject({ feedImport: null, success: true });
+    expect(newest.details.toLowerCase()).toContain("manual entry");
+  });
+  it("invalid values or a denied request write no SyncLog and do not refresh the sync time", async () => {
+    const token = await staff("westgate");
+    const logsBefore = logsOf("ph-westgate").length;
+    const hubLogsBefore = logsOf("ph-hubcity").length;
+    const syncBefore = app.db.get<any>("pharmacies", "ph-westgate").lastSyncAt;
+    expect((await put(token, "lst-ph-westgate-PF-10001", { stock: 5, price: 0 }, "ph-westgate")).status).toBe(400);
+    expect((await put(token, "lst-ph-hubcity-PF-10001", { stock: 5, price: 5 }, "ph-hubcity")).status).toBe(403);
+    expect(logsOf("ph-westgate").length).toBe(logsBefore);
+    expect(logsOf("ph-hubcity").length).toBe(hubLogsBefore);
+    expect(app.db.get<any>("pharmacies", "ph-westgate").lastSyncAt).toBe(syncBefore);
+    expect((await call("GET", "/api/portal/ph-westgate/dashboard", { token })).body.data.isStale).toBe(true);
+  });
+  it("the sync is recorded after the listing is saved (the saved listing and the log share the same time)", async () => {
+    const token = await staff("hubcity");
+    app.clock.advance(HOUR);
+    await put(token, "lst-ph-hubcity-PF-10002", { stock: 3, price: 4.5 });
+    const log = logsOf("ph-hubcity").reduce((a: any, b: any) => (a.syncedAt >= b.syncedAt ? a : b));
+    expect(listingOf("ph-hubcity", "PF-10002").lastUpdated).toBe(log.syncedAt);
+  });
+  it("the dashboard shows the manual entry as the latest sync", async () => {
+    const token = await staff("hubcity");
+    app.clock.advance(HOUR);
+    await put(token, "lst-ph-hubcity-PF-10001", { stock: 6, price: 10 });
+    const d = await call("GET", "/api/portal/ph-hubcity/dashboard", { token });
+    expect(d.status).toBe(200);
+    expect(d.body.data.lastSyncAt).toBe(app.clock.iso());
+    expect(d.body.data.latestSync).toMatchObject({ success: true, syncedAt: app.clock.iso() });
+    expect(d.body.data.latestSync.details.toLowerCase()).toContain("manual entry");
+  });
+  it("a manual sync keeps the pharmacy fresh for 24 h and then goes stale like any other sync", async () => {
+    const token = await staff("westgate");
+    await put(token, "lst-ph-westgate-PF-10001", { stock: 10, price: 8.5 }, "ph-westgate");
+    app.clock.advance(2 * HOUR);
+    expect(app.db.get<any>("pharmacies", "ph-westgate").lastSyncAt).not.toBeNull();
+    expect((await call("GET", "/api/portal/ph-westgate/dashboard", { token })).body.data.isStale).toBe(false);
+    app.clock.advance(23 * HOUR); // 25 h since the manual save (the 12 h session has expired, so log in again)
+    const fresh = await staff("westgate");
+    expect((await call("GET", "/api/portal/ph-westgate/dashboard", { token: fresh })).body.data.isStale).toBe(true);
+  });
 });
 
 /* ===================================================================================================

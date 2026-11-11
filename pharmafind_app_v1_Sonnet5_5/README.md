@@ -16,7 +16,7 @@ npm run build && npm start
 
 ## Test suite
 
-**`tests/pharmafind.test.ts`** (Vitest, 130 tests). Run it with `npm test`.
+**`tests/pharmafind.test.ts`** (Vitest, 136 tests). Run it with `npm test`.
 
 It was written first (TDD) from the requirements and diagrams, before the implementation. It covers the mock DB / adapters, search and ranking,
 the 24 h data-recency rule, authentication and per-pharmacy access control, password reset with security codes, manual edits, CSV import validation,
@@ -55,7 +55,7 @@ Search examples: `ibuprofen`, `Tylenol`, `amoxicillin`.
 
 * **Standard format, validate only.** POS feeds, CSV files and the drug reference already use Pharmafind's format and `PF-nnnnn` catalog IDs. **Feed Import** is the only place incoming data is checked; it rejects non-compliant rows and never trims, converts or repairs anything (`src/lib/services/feedImport.ts`). There is no translation or normalisation layer.
   CSV: header exactly `catalogId,stock,price`; stock a whole number ≥ 0; price > 0 with a dot and ≤ 2 decimals; duplicate IDs in a file rejected. Valid rows are saved, rejected rows are reported; a file with no valid rows is rejected and logged as a failed sync.
-* **Data recency.** Stock/price data up to 24 h old is shown normally; older data is shown but labelled **"Stale data: likely out of date"**; every result carries a "last updated" indicator. Pharmacies get a dashboard warning and an alert e-mail (once per 24 h) when their last *successful* sync is over 24 h old.
+* **Data recency.** Stock/price data up to 24 h old is shown normally; older data is shown but labelled **"Stale data: likely out of date"**; every result carries a "last updated" indicator. A manual save in the portal also counts as a sync: it writes a successful Sync Log entry ("Manual entry: …") with no Feed Import attached, so a manager who updates by hand is not flagged as stale. Invalid or denied edits write nothing. Pharmacies get a dashboard warning and an alert e-mail (once per 24 h) when their last *successful* sync is over 24 h old.
 * **Registration ≠ verification.** A registered pharmacy stays hidden from search until an admin verifies it (registry check + manual document check). Only verified pharmacies appear, with a "verified" badge.
 * **Own-pharmacy data only.** Every portal route checks that the logged-in manager belongs to the pharmacy in the URL. Admins use the admin console, not the portal.
 

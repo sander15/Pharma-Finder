@@ -37,6 +37,10 @@ sequenceDiagram
                 LST->>DB: save (listing, lastUpdated = now)
                 DB-->>LST: saved
                 LST-->>API: listing updated
+                Note over API,SL: A manual save also counts as a sync, so the stale-sync check does not flag a manager who updates by hand
+                API->>SL: record (success, source = manual entry, no feed import)
+                SL->>DB: save (sync log)
+                DB-->>SL: saved
                 API-->>PP: sendJsonResponse (saved)
                 PP->>PP: showListingEditor (saved)
             else values are invalid
@@ -135,4 +139,4 @@ sequenceDiagram
             FI-->>JOB: import result
             Note over JOB: Nobody is waiting for a reply. The manager sees the new sync time on her dashboard (Story 2)
         end
-    end
+    end

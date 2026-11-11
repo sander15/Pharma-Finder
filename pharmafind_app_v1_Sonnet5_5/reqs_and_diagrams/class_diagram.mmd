@@ -60,7 +60,7 @@ flowchart TD
     Pharmacy ---|"1 / 0..*<br>submits"| FeedImport
     AutoFeed ---|"0..1 / 0..*<br>produces"| FeedImport
     FeedImport ---|"0..* / 0..*<br>updates"| Listing
-    FeedImport ---|"1 / 1<br>recorded-in"| SyncLog
+    FeedImport ---|"0..1 / 1<br>recorded-in"| SyncLog
     Pharmacy ---|"1 / 0..*<br>synced-by"| SyncLog
 
     %% Background jobs and notifications
@@ -125,4 +125,4 @@ flowchart TD
     classDef infra fill:#ffedd5,stroke:#c2410c,stroke-dasharray:4 2;
     class ClientApp,Portal,Console boundary;
     class RestApi,AuthSvc control;
-    class Db,Files,EmailA,DrugA,PosA,LicA,DirA,GeoA infra;
+    class Db,Files,EmailA,DrugA,PosA,LicA,DirA,GeoA infra;

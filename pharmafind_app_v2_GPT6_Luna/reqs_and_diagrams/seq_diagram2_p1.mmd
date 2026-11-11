@@ -1,0 +1,50 @@
+sequenceDiagram
+    actor U as User
+    participant C as C: Consumer
+    participant S as S: Search
+    participant P as P: Product
+    participant L as L: Listing
+    participant PH as PH: Pharmacy
+    participant OL as OL: Location (origin)
+    participant PL as PL: Location (pharmacy)
+
+    U->>C: setLocation()
+    U->>C: searchMedicine()
+    C->>S: matchProduct(queryText, origin)
+    S->>OL: toCoordinates()
+    OL-->>S: origin coordinates
+    S->>P: matchesName(queryText)
+    P-->>S: matching Product(s) (each with its own presentation and dosage)
+
+    alt no product matched
+        S-->>C: Empty result (no pharmacies found)
+        C-->>U: No pharmacies found
+    else product matched
+        S->>S: findListings()
+
+        loop each matching Product (one per presentation and dosage)
+            S->>P: getListings()
+            P-->>S: Listing(s) for that presentation and dosage
+
+            loop each Listing
+                S->>L: isInStock()
+                L->>PH: isVisibleInSearch()
+                PH->>PH: isVerified()
+                PH->>PL: distanceTo(origin coordinates)
+                PL-->>PH: distance
+                PH-->>L: visibility, distance, pharmacy name, isAccessible flag
+                L-->>S: stock status, price, lastUpdated, pharmacy data
+            end
+        end
+
+        S->>S: filterVerifiedOnly()
+
+        opt needsAccessibleAccess is true
+            S->>S: filterAccessible()
+        end
+
+        S->>S: rankByDistance()
+        S-->>C: Results grouped by presentation and dosage
+        C-->>U: Stock per pharmacy, accessibility flag, last updated
+        U->>C: compareResults()
+    end

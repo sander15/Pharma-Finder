@@ -1,0 +1,413 @@
+classDiagram
+    class Consumer {
+        <<actor - Outside layers>>
+        sessionId
+        currentLocation
+        needsAccessibleAccess
+        searchMedicine()
+        compareResults()
+        setLocation()
+        getDirections()
+    }
+    class Search {
+        <<entity - Layer 3>>
+        searchId
+        queryText
+        origin
+        performedAt
+        maxDistanceKm
+        matchProduct()
+        findListings()
+        rankByDistance()
+        filterVerifiedOnly()
+        filterAccessible()
+    }
+    class Account {
+        <<entity - Layer 2>>
+        accountId
+        email
+        passwordHash
+        role
+        isActive
+        createdAt
+        login()
+        logout()
+        requestPasswordReset()
+        resetPassword()
+        hasPermission()
+        canAccessPharmacy()
+    }
+    class PharmacyStaff {
+        <<actor - Outside layers>>
+        staffId
+        fullName
+        account
+        pharmacy
+        updateListing()
+        uploadCsv()
+        configureAutomaticFeed()
+        viewVerificationStatus()
+        viewLastSync()
+        previewPublicListing()
+    }
+    class Admin {
+        <<actor - Outside layers>>
+        adminId
+        fullName
+        account
+        reviewRegistration()
+        checkLicenseManually()
+        approve()
+        reject()
+        listPendingRequests()
+    }
+    class Pharmacy {
+        <<entity - Layer 3>>
+        pharmacyId
+        name
+        licenseNumber
+        phone
+        location
+        isAccessible
+        verificationStatus
+        lastSyncAt
+        register()
+        updateProfile()
+        isVerified()
+        isVisibleInSearch()
+        isSyncStale()
+        getListings()
+    }
+    class Location {
+        <<entity - Layer 3>>
+        locationId
+        latitude
+        longitude
+        address
+        city
+        country
+        distanceTo()
+        isWithin()
+        toCoordinates()
+    }
+    class VerificationRequest {
+        <<entity - Layer 3>>
+        requestId
+        pharmacy
+        status
+        submittedAt
+        reviewedAt
+        reviewer
+        rejectionReason
+        submit()
+        attachDocument()
+        checkWithRegistry()
+        markVerified()
+        markRejected()
+    }
+    class LicenseDocument {
+        <<entity - Layer 3>>
+        documentId
+        fileName
+        storagePath
+        mimeType
+        uploadedAt
+        upload()
+        download()
+        delete()
+    }
+    class Product {
+        <<entity - Layer 3>>
+        catalogId
+        brandName
+        genericName
+        presentation
+        dosage
+        reference
+        getListings()
+        matchesName()
+        refreshFromReference()
+    }
+    class DrugReferenceEntry {
+        <<entity - Layer 3>>
+        referenceId
+        activeIngredient
+        brandName
+        genericName
+        description
+        lastUpdated
+        fetchFromAdapter()
+        getGenericAlternatives()
+    }
+    class Listing {
+        <<entity - Layer 3>>
+        listingId
+        pharmacy
+        product
+        stock
+        price
+        lastUpdated
+        updateStock()
+        updatePrice()
+        isInStock()
+        validate()
+    }
+    class AutomaticFeed {
+        <<entity - Layer 3>>
+        feedId
+        pharmacy
+        posEndpoint
+        intervalMinutes
+        isEnabled
+        lastPulledAt
+        enable()
+        disable()
+        fetchLatestData()
+        testConnection()
+    }
+    class FeedImport {
+        <<entity - Layer 3>>
+        importId
+        pharmacy
+        source
+        storedFilePath
+        totalRows
+        validRows
+        rejectedRows
+        startedAt
+        validateRows()
+        validatePrice()
+        validateStock()
+        validateCatalogId()
+        saveValidRows()
+        storeFileCopy()
+        recordSyncTime()
+    }
+    class SyncLog {
+        <<entity - Layer 3>>
+        logId
+        pharmacy
+        feedImport
+        syncedAt
+        success
+        details
+        record()
+        getLatestFor()
+        isOlderThan()
+    }
+    class Notification {
+        <<entity - Layer 3>>
+        notificationId
+        recipient
+        type
+        subject
+        body
+        status
+        retryCount
+        createdAt
+        compose()
+        send()
+        markFailed()
+        retry()
+    }
+    class SecurityCode {
+        <<entity - Layer 2>>
+        codeId
+        account
+        codeHash
+        expiresAt
+        isUsed
+        generate()
+        verify()
+        isExpired()
+        invalidate()
+    }
+    class ScheduledJob {
+        <<entity - Layer 3>>
+        jobId
+        type
+        intervalMinutes
+        nextRunAt
+        lastRunAt
+        status
+        schedule()
+        isDue()
+        execute()
+        checkStaleSync()
+        pullPosFeeds()
+        refreshDrugReference()
+        retryFailedEmails()
+    }
+
+    %% ===== Layer 1: Presentation (UI / boundary classes) =====
+    class ClientApp {
+        <<boundary - Layer 1>>
+        platform
+        showSearchForm()
+        requestLocationPermission()
+        showResults()
+        showComparison()
+        showPharmacyDetails()
+        showVerifiedBadge()
+        openDirections()
+    }
+    class PharmacyPortal {
+        <<boundary - Layer 1>>
+        showLogin()
+        showSecurityCodePrompt()
+        showListingEditor()
+        showCsvUpload()
+        showFeedSetup()
+        showVerificationStatus()
+        showSyncDashboard()
+        showListingPreview()
+    }
+    class AdminConsole {
+        <<boundary - Layer 1>>
+        showLogin()
+        showPendingRegistrations()
+        showRequestDetails()
+        showLicenseDocument()
+        recordDecision()
+    }
+
+    %% ===== Layer 2: Interface management and security (control classes) =====
+    class RestApi {
+        <<control - Layer 2>>
+        receiveRequest()
+        validateInput()
+        routeRequest()
+        sendJsonResponse()
+    }
+    class AccessAndAuthentication {
+        <<control - Layer 2>>
+        authenticate()
+        issueSessionToken()
+        authorize()
+        checkPharmacyScope()
+        startPasswordReset()
+        verifySecurityCode()
+    }
+
+    %% ===== Layer 4: Data and system services =====
+    class FileStorage {
+        <<service - Layer 4>>
+        store()
+        retrieve()
+        remove()
+    }
+    class RelationalDbGeo {
+        <<service - Layer 4>>
+        save()
+        query()
+        geoQuery()
+    }
+    class EmailAdapter {
+        <<interface - Layer 4>>
+        sendEmail()
+    }
+    class DrugReferenceAdapter {
+        <<interface - Layer 4>>
+        fetchEntry()
+        searchByName()
+    }
+    class PosFeedConnector {
+        <<interface - Layer 4>>
+        pullFeed()
+        testConnection()
+    }
+    class LicenseCheckAdapter {
+        <<interface - Layer 4>>
+        checkLicense()
+    }
+    class DirectionsAdapter {
+        <<interface - Layer 4>>
+        getRouteLink()
+    }
+    class GeocodingAdapter {
+        <<interface - Layer 4>>
+        geocode()
+    }
+
+    %% Users and accounts
+    Account "1" -- "0..1" PharmacyStaff : acts-as
+    Account "1" -- "0..1" Admin : acts-as
+    PharmacyStaff "1..*" -- "1" Pharmacy : works-at
+    SecurityCode "0..*" -- "1" Account : issued-to
+    Notification "0..*" -- "1" Account : addressed-to
+
+    %% Pharmacy, location and verification
+    Pharmacy "1" -- "1" Location : located-at
+    Pharmacy "1" -- "1..*" VerificationRequest : undergoes
+    VerificationRequest "1" -- "1..*" LicenseDocument : supported-by
+    Admin "0..1" -- "0..*" VerificationRequest : reviews
+
+    %% Catalog and listings
+    Product "1..*" -- "1" DrugReferenceEntry : described-by
+    Product "1" -- "0..*" Listing : listed-as
+    Pharmacy "1" -- "0..*" Listing : stocks
+
+    %% Feed import and synchronisation
+    Pharmacy "1" -- "0..1" AutomaticFeed : configures
+    Pharmacy "1" -- "0..*" FeedImport : submits
+    AutomaticFeed "0..1" -- "0..*" FeedImport : produces
+    FeedImport "0..*" -- "0..*" Listing : updates
+    FeedImport "1" -- "1" SyncLog : recorded-in
+    Pharmacy "1" -- "0..*" SyncLog : synced-by
+
+    %% Background jobs and notifications
+    ScheduledJob "0..1" -- "0..*" FeedImport : triggers
+    ScheduledJob "0..1" -- "0..*" Notification : triggers / retries
+    ScheduledJob "0..*" -- "0..*" AutomaticFeed : triggers pulls of
+    ScheduledJob "0..*" -- "0..*" SyncLog : checks stale-sync of
+    ScheduledJob "0..*" -- "0..*" DrugReferenceEntry : refreshes
+
+    %% Searching and directions
+    Consumer "1" -- "0..*" Search : performs
+    Search "0..*" -- "1" Product : looks-for
+    Search "0..*" -- "0..*" Listing : returns
+    Search "0..*" -- "1" Location : originates-at
+    Consumer "0..*" -- "0..*" Pharmacy : gets-directions-to
+
+    %% Security code delivery
+    SecurityCode "0..1" -- "0..1" Notification : delivered-by
+
+    %% Layer 1: who uses which UI
+    Consumer ..> ClientApp : uses
+    PharmacyStaff ..> PharmacyPortal : uses
+    Admin ..> AdminConsole : uses
+
+    %% Layer 1 -> Layer 2
+    ClientApp ..> RestApi : HTTPS requests
+    PharmacyPortal ..> RestApi : HTTPS requests
+    AdminConsole ..> RestApi : HTTPS requests
+    RestApi ..> AccessAndAuthentication : authorizes each call
+
+    %% Layer 2 -> domain
+    RestApi ..> Search : routes searches
+    RestApi ..> Listing : routes manual edits
+    RestApi ..> FeedImport : routes uploads
+    RestApi ..> VerificationRequest : routes reviews
+    RestApi ..> Pharmacy : routes registration and profiles
+    AccessAndAuthentication ..> Account : authenticates
+    AccessAndAuthentication ..> SecurityCode : issues and checks
+
+    %% Domain -> Layer 4
+    LicenseDocument ..> FileStorage : stored-in
+    FeedImport ..> FileStorage : keeps file copy
+    Notification ..> EmailAdapter : sent-through
+    DrugReferenceEntry ..> DrugReferenceAdapter : fetched-via
+    AutomaticFeed ..> PosFeedConnector : pulls-via
+    VerificationRequest ..> LicenseCheckAdapter : checked-via
+    Search ..> DirectionsAdapter : routes-via
+    Location ..> GeocodingAdapter : geocoded-via
+    PosFeedConnector ..> Pharmacy : 1..* connects-to
+
+    %% Domain -> Layer 4 (Relational DB with Geo Extension)
+    Account ..> RelationalDbGeo : stored-in
+    Pharmacy ..> RelationalDbGeo : stored-in
+    Location ..> RelationalDbGeo : stored-in (geo)
+    Product ..> RelationalDbGeo : stored-in
+    Listing ..> RelationalDbGeo : stored-in
+    SyncLog ..> RelationalDbGeo : stored-in
+    ScheduledJob ..> RelationalDbGeo : stored-in (job table)

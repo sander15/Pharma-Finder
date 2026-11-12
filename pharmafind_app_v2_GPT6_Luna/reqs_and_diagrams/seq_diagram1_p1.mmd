@@ -49,9 +49,20 @@ sequenceDiagram
         S->>OL: toCoordinates ()
         alt user typed an address
             OL->>GEO: geocode (address)
-            GEO-->>OL: latitude, longitude
+            alt address was found
+                GEO-->>OL: latitude, longitude
+            else address could not be found
+                GEO-->>OL: no coordinates (location is not valid)
+            end
         else GPS coordinates already known
             Note over OL: nothing to geocode
+        end
+
+        break location could not be turned into coordinates
+            OL-->>S: error (invalid location)
+            S-->>API: error (location not found)
+            API-->>CA: sendJsonResponse (error: location not found)
+            CA->>CA: showResults (error message, ask user to type a valid location)
         end
         OL-->>S: origin coordinates
 
@@ -85,6 +96,7 @@ sequenceDiagram
         S-->>API: results sorted nearest first
         API-->>CA: sendJsonResponse (ranked results)
 
+        note over CA,CA: Always display the stock status (even if it is out of stock).
         alt at least one pharmacy has the medicine
             CA->>CA: showResults (pharmacy name, stock status, price, presentation)
         else no nearby pharmacy has it
@@ -92,5 +104,5 @@ sequenceDiagram
         end
     end
 
-    CA-->>C: results displayed
-    C-->>U: nearby pharmacies ranked by distance
+    CA-->>C: results or error message displayed
+    C-->>U: nearby pharmacies ranked by distance, or a message asking to fix the input

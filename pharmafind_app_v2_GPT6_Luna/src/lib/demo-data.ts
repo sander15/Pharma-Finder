@@ -28,7 +28,7 @@ export const initialListings: Listing[] = [
   { id: "sz4-1002", pharmacyId: "salud-zona-4", catalogId: "PF-1002", stock: 9, price: 29.75 },
   { id: "sz4-5001", pharmacyId: "salud-zona-4", catalogId: "PF-5001", stock: 5, price: 48 },
   { id: "pending-1001", pharmacyId: "farmacia-pendiente", catalogId: "PF-1001", stock: 30, price: 11 },
-];
+].map((listing) => ({ ...listing, lastUpdated: initialPharmacies.find((pharmacy) => pharmacy.id === listing.pharmacyId)!.lastUpdated }));
 
 export const demoOrigin = { latitude: 14.603, longitude: -90.523 };
 

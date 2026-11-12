@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   importFeedRows,
   isStale,
+  geocodeDemoAddress,
+  authenticateDemoUser,
+  authorizePharmacyScope,
+  testPosConnection,
+  verificationDecision,
+  createSyncLog,
+  attemptEmailDelivery,
   parseStandardCsv,
   searchInventory,
   updateListing,
@@ -45,10 +52,15 @@ describe("consumer search", () => {
     expect(results.every((result) => result.pharmacy.accessible)).toBe(true);
   });
 
-  it("does not present out-of-stock listings as available search results", () => {
+  it("keeps out-of-stock listings visible with their exact zero stock status", () => {
     const outOfStock = listings.map((listing) => listing.id === "l2" ? { ...listing, stock: 0 } : listing);
     const results = searchInventory("Paracetamol", { latitude: 14.599, longitude: -90.515 }, products, pharmacies, outOfStock);
-    expect(results.some((result) => result.listing.stock === 0)).toBe(false);
+    expect(results.find((result) => result.listing.id === "l2")?.listing.stock).toBe(0);
+  });
+
+  it("returns a location error for an address the mock geocoder cannot resolve", () => {
+    expect(geocodeDemoAddress("Zona 10, Ciudad de Guatemala")).toEqual({ latitude: 14.5995, longitude: -90.5133 });
+    expect(geocodeDemoAddress("Mars Station 4")).toBeNull();
   });
 });
 
@@ -73,6 +85,8 @@ describe("feed imports", () => {
     expect(imported.accepted).toBe(1);
     expect(imported.rejected.map((row) => row.reason)).toEqual(["Unknown catalog ID", "Stock must be a whole number at least 0", "Stock must be a whole number at least 0"]);
     expect(imported.listings.find((listing) => listing.catalogId === "PF-1001" && listing.pharmacyId === "farmacia-central")?.stock).toBe(5);
+    expect(imported.listings.find((listing) => listing.catalogId === "PF-1001" && listing.pharmacyId === "farmacia-central")?.lastUpdated).toBe(now.toISOString());
+    expect(imported.listings.find((listing) => listing.catalogId === "PF-1002" && listing.pharmacyId === "farmacia-central")?.lastUpdated).toBeUndefined();
   });
 
   it("rejects updates outside the manager's pharmacy scope", () => {
@@ -83,11 +97,55 @@ describe("feed imports", () => {
     expect(() => updateListing("farmacia-central", "farmacia-central", "l1", 1.2, 10, listings, pharmacies, now)).toThrow("Stock must be a whole number");
     expect(() => updateListing("farmacia-central", "farmacia-central", "l1", 1, 0, listings, pharmacies, now)).toThrow("Price must be greater than zero");
   });
+
+  it("timestamps only the listing changed by a manual update", () => {
+    const updated = updateListing("farmacia-central", "farmacia-central", "l1", 15, 19, listings, pharmacies, now);
+    expect(updated.find((listing) => listing.id === "l1")?.lastUpdated).toBe(now.toISOString());
+    expect(updated.find((listing) => listing.id === "l2")?.lastUpdated).toBeUndefined();
+  });
+
+  it("validates POS endpoint and pull interval before enabling the scheduled feed", () => {
+    expect(testPosConnection("https://pos.demo/pharmafind", 60)).toEqual({ connected: true });
+    expect(testPosConnection("not a url", 60).connected).toBe(false);
+    expect(testPosConnection("https://offline.demo/feed", 60).connected).toBe(false);
+    expect(testPosConnection("https://pos.demo/feed", 2).connected).toBe(false);
+  });
 });
 
 describe("data freshness", () => {
   it("marks data stale only when it is older than 24 hours", () => {
     expect(isStale("2026-11-09T18:00:00.000Z", now)).toBe(false);
     expect(isStale("2026-11-09T17:59:59.000Z", now)).toBe(true);
+  });
+});
+
+describe("account and verification flows", () => {
+  it("authenticates the demo pharmacy and admin accounts and enforces pharmacy scope", () => {
+    const manager = authenticateDemoUser("patricia@farmacia.demo", "farmacia123");
+    const admin = authenticateDemoUser("admin@pharmafind.demo", "admin123");
+    expect(manager?.role).toBe("pharmacy");
+    expect(authorizePharmacyScope(manager!, "farmacia-central")).toBe(true);
+    expect(authorizePharmacyScope(manager!, "botica-norte")).toBe(false);
+    expect(admin?.role).toBe("admin");
+    expect(authenticateDemoUser("patricia@farmacia.demo", "wrong")).toBeNull();
+  });
+
+  it("requires a rejection reason and returns the decision status", () => {
+    expect(verificationDecision("approve")).toEqual({ status: "verified" });
+    expect(verificationDecision("reject", "License did not match")).toEqual({ status: "rejected", reason: "License did not match" });
+    expect(() => verificationDecision("reject", "  ")).toThrow("A rejection reason is required");
+  });
+});
+
+describe("sync and email workflows", () => {
+  it("records accepted and rejected counts in a sync log", () => {
+    expect(createSyncLog("farmacia-central", "csv", 3, 2, now)).toMatchObject({ pharmacyId: "farmacia-central", source: "csv", acceptedRows: 3, rejectedRows: 2, status: "partial" });
+  });
+
+  it("marks failed email deliveries and records a successful retry", () => {
+    const failed = attemptEmailDelivery("stale-alert-1", true, now);
+    expect(failed.status).toBe("failed");
+    const retried = attemptEmailDelivery(failed.id, false, now, failed.attempts);
+    expect(retried).toMatchObject({ id: failed.id, status: "sent", attempts: 2 });
   });
 });

@@ -18,10 +18,66 @@ export type Pharmacy = {
   accessible: boolean | null;
   lastUpdated: string;
 };
-export type Listing = { id: string; pharmacyId: string; catalogId: string; stock: number; price: number };
+export type Listing = { id: string; pharmacyId: string; catalogId: string; stock: number; price: number; lastUpdated?: string };
 export type SearchResult = { pharmacy: Pharmacy; product: Product; listing: Listing; distanceKm: number };
 export type FeedRow = { catalogId: string; stock: number; price: number };
 export type RejectedFeedRow = { row: number; reason: string };
+export type DemoRole = "pharmacy" | "admin";
+export type DemoSession = { token: string; role: DemoRole; pharmacyId?: string; email: string };
+export type VerificationStatus = "pending" | "verified" | "rejected";
+export type VerificationDecision = { status: "verified" } | { status: "rejected"; reason: string };
+export type SyncLog = { id: string; pharmacyId: string; source: "manual" | "csv" | "pos"; syncedAt: string; acceptedRows: number; rejectedRows: number; status: "success" | "partial" | "failed" };
+export type EmailDelivery = { id: string; status: "sent" | "failed"; attempts: number; attemptedAt: string };
+
+const demoAccounts = [
+  { email: "patricia@farmacia.demo", password: "farmacia123", role: "pharmacy" as const, pharmacyId: "farmacia-central" },
+  { email: "admin@pharmafind.demo", password: "admin123", role: "admin" as const },
+];
+
+export function authenticateDemoUser(email: string, password: string): DemoSession | null {
+  const account = demoAccounts.find((candidate) => candidate.email === email.trim().toLocaleLowerCase() && candidate.password === password);
+  if (!account) return null;
+  return { token: `demo-session-${account.role}`, role: account.role, ...(account.role === "pharmacy" ? { pharmacyId: account.pharmacyId } : {}), email: account.email };
+}
+
+export function authorizePharmacyScope(session: DemoSession, pharmacyId: string): boolean {
+  return session.role === "admin" || session.pharmacyId === pharmacyId;
+}
+
+export function geocodeDemoAddress(address: string): Coordinates | null {
+  const normalized = address.toLocaleLowerCase();
+  if (normalized.includes("zona 10") || normalized.includes("reforma")) return { latitude: 14.5995, longitude: -90.5133 };
+  if (normalized.includes("zona 1") || normalized.includes("centro histórico") || normalized.includes("centro historico")) return { latitude: 14.6412, longitude: -90.5131 };
+  if (normalized.includes("zona 4")) return { latitude: 14.6213, longitude: -90.5172 };
+  return null;
+}
+
+export function testPosConnection(endpoint: string, intervalMinutes: number): { connected: boolean; error?: string } {
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 5 || intervalMinutes > 1440) return { connected: false, error: "El intervalo debe ser de 5 a 1,440 minutos." };
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".demo")) return { connected: false, error: "Usa una URL HTTPS del entorno POS de demostración." };
+    if (url.hostname.startsWith("offline.") || url.pathname.includes("unavailable")) return { connected: false, error: "No se pudo establecer conexión con el POS." };
+    return { connected: true };
+  } catch {
+    return { connected: false, error: "Ingresa una URL válida para el POS." };
+  }
+}
+
+export function verificationDecision(decision: "approve" | "reject", reason = ""): VerificationDecision {
+  if (decision === "approve") return { status: "verified" };
+  if (!reason.trim()) throw new Error("A rejection reason is required");
+  return { status: "rejected", reason: reason.trim() };
+}
+
+export function createSyncLog(pharmacyId: string, source: SyncLog["source"], acceptedRows: number, rejectedRows: number, now = new Date()): SyncLog {
+  const status = acceptedRows > 0 && rejectedRows > 0 ? "partial" : acceptedRows > 0 ? "success" : "failed";
+  return { id: `sync-${pharmacyId}-${now.getTime()}`, pharmacyId, source, syncedAt: now.toISOString(), acceptedRows, rejectedRows, status };
+}
+
+export function attemptEmailDelivery(id: string, shouldFail: boolean, now = new Date(), previousAttempts = 0): EmailDelivery {
+  return { id, status: shouldFail ? "failed" : "sent", attempts: previousAttempts + 1, attemptedAt: now.toISOString() };
+}
 
 export function parseStandardCsv(contents: string): FeedRow[] {
   const lines = contents.split(/\r?\n/);
@@ -54,7 +110,7 @@ export function searchInventory(query: string, origin: Coordinates, products: Pr
   return listings.flatMap((listing) => {
     const pharmacy = pharmacyById.get(listing.pharmacyId);
     const product = productById.get(listing.catalogId);
-    if (!pharmacy || !product || listing.stock <= 0 || (accessibleOnly && pharmacy.accessible !== true)) return [];
+    if (!pharmacy || !product || (accessibleOnly && pharmacy.accessible !== true)) return [];
     return [{ pharmacy, product, listing, distanceKm: distanceKm(origin, pharmacy) }];
   }).sort((a, b) => a.distanceKm - b.distanceKm || a.listing.price - b.listing.price);
 }
@@ -69,7 +125,7 @@ export function updateListing(managerPharmacyId: string, targetPharmacyId: strin
   if (!Number.isFinite(price) || price <= 0) throw new Error("Price must be greater than zero");
   const target = listings.find((listing) => listing.id === listingId && listing.pharmacyId === managerPharmacyId);
   if (!target) throw new Error("Listing not found");
-  return listings.map((listing) => listing.id === listingId ? { ...listing, stock, price } : listing);
+  return listings.map((listing) => listing.id === listingId ? { ...listing, stock, price, lastUpdated: now.toISOString() } : listing);
 }
 
 export function importFeedRows(pharmacyId: string, rows: FeedRow[], products: Product[], pharmacies: Pharmacy[], listings: Listing[], now = new Date()): { accepted: number; rejected: RejectedFeedRow[]; listings: Listing[]; pharmacy: Pharmacy } {
@@ -92,8 +148,8 @@ export function importFeedRows(pharmacyId: string, rows: FeedRow[], products: Pr
       return;
     }
     const existing = nextListings.find((listing) => listing.pharmacyId === pharmacyId && listing.catalogId === row.catalogId);
-    if (existing) nextListings = nextListings.map((listing) => listing.id === existing.id ? { ...listing, stock: row.stock, price: row.price } : listing);
-    else nextListings.push({ id: `${pharmacyId}-${row.catalogId}`, pharmacyId, catalogId: row.catalogId, stock: row.stock, price: row.price });
+    if (existing) nextListings = nextListings.map((listing) => listing.id === existing.id ? { ...listing, stock: row.stock, price: row.price, lastUpdated: now.toISOString() } : listing);
+    else nextListings.push({ id: `${pharmacyId}-${row.catalogId}`, pharmacyId, catalogId: row.catalogId, stock: row.stock, price: row.price, lastUpdated: now.toISOString() });
   });
   return { accepted: rows.length - rejected.length, rejected, listings: nextListings, pharmacy: { ...pharmacy, lastUpdated: now.toISOString() } };
 }

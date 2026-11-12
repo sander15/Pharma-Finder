@@ -11,11 +11,12 @@ npm run dev
 
 ## App areas
 
-- **Buscar medicamentos:** searches mock product and listing data, ranks in-stock results by distance, filters for wheelchair-accessible locations, and shows pharmacy verification, exact presentation, price, stock, and update time.
-- **Portal de farmacia:** edits stock and price with validation and pharmacy ownership checks; imports standard CSV rows; simulates a POS connection and sync; and shows sync freshness and a public listing preview.
-- **Administración:** reviews a mock pharmacy registration and can verify it, making that pharmacy visible to search.
+- **Buscar medicamentos:** resolves supported demo zones or GPS, ranks listings by distance, includes out-of-stock rows, filters for wheelchair-accessible locations, and compares exact presentations with pharmacy details.
+- **Portal de farmacia:** requires a demo login; edits stock and price with pharmacy-scope checks; imports standard CSV rows, keeps a session copy and sync log, configures/tests a mock POS endpoint and interval, and previews the public listing.
+- **Administración:** requires a separate demo login; reviews uploaded license documents against a mock registry and can approve or reject requests with a reason.
+- **Sync alerts:** a mock scheduled job checks stale listings, sends mock email alerts, and retries failed deliveries.
 
-The app includes a PWA manifest, install affordance, app icon, and service worker with an offline shell fallback. Data is held in the browser session and resets on reload. The POS feed, drug catalog, licensing registry, directions, and storage are demo mocks; no external service or production database is connected.
+The app includes a PWA manifest, install affordance, app icons, and service worker with an offline shell fallback. Data and session tokens are held in memory and reset on reload. The POS feed, drug catalog, licensing registry, geocoder, email, directions, and file storage are demo mocks; no external service or production database is connected. Demo sign-ins are shown on the login dialog: pharmacy `patricia@farmacia.demo` / `farmacia123`; administrator `admin@pharmafind.demo` / `admin123`.
 
 ## Feed format
 
@@ -31,4 +32,4 @@ Catalog IDs are matched exactly. Stock must be a non-negative whole number, and 
 
 ## Tests
 
-Run the test suite with `npm test`. The suite is [src/lib/domain.test.ts](src/lib/domain.test.ts) and covers search visibility and ranking, accessibility filtering, strict feed validation, pharmacy edit scope, and the 24-hour freshness rule.
+Run the test suite with `npm test`. The suite is [src/lib/domain.test.ts](src/lib/domain.test.ts) and covers search visibility, stock status, location lookup, accessibility filtering, strict feed validation, POS setup validation, demo authentication and scope, verification decisions, sync logs, email retry, and the 24-hour freshness rule.

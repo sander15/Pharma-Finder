@@ -14,10 +14,32 @@ sequenceDiagram
     participant NTF as NTF: Notification
     participant EA as EA: EmailAdapter
 
-    Note over U,PS: The manager is already logged in
+    %% ---------- Part 0: the manager logs in ----------
+    U->>PS: viewLastSync ()
+    PS->>PP: showLogin ()
+    PP-->>PS: login form shown
+    PS-->>U: asks for email and password
+    PP->>API: receiveRequest (email, password)
+    API->>API: validateInput ()
+    API->>AUTH: authenticate (email, password)
+    AUTH->>ACC: login ()
+    ACC->>DB: query (account with this email)
+    DB-->>ACC: account record
+    ACC-->>AUTH: credentials correct or not
+    alt credentials are correct
+        AUTH->>AUTH: issueSessionToken ()
+        AUTH-->>API: session token
+        API-->>PP: sendJsonResponse (session token)
+        PP-->>PS: logged in
+        Note over U,PS: From now on every request carries the session token
+    else credentials are wrong
+        AUTH-->>API: login failed
+        API-->>PP: sendJsonResponse (error: wrong email or password)
+        PP->>PP: showLogin (error message, try again)
+        Note over U,PS: The rest of this diagram assumes the login succeeded
+    end
 
     %% ---------- Part 1: when was my data last updated? ----------
-    U->>PS: viewLastSync ()
     PS->>PP: showSyncDashboard ()
     PP->>API: receiveRequest (pharmacyId)
     API->>API: validateInput ()

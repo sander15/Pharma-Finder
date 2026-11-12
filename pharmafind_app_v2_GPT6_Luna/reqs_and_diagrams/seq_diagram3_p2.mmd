@@ -46,8 +46,31 @@ sequenceDiagram
     PP-->>PS: status shown
     PS-->>U: pending, listing hidden from searchers until verified
 
-    %% ---------- Part 2: the administrator reviews the request ----------
+    %% ---------- Part 2: the administrator logs in, then reviews the request ----------
     ADM->>AD: reviewRegistration (requestId)
+    AD->>AC: showLogin ()
+    AC-->>AD: login form shown
+    AD-->>ADM: asks for email and password
+    Note over ADM,AC: The administrator types an email and password and submits the form
+    AC->>API: receiveRequest (email, password)
+    API->>API: validateInput ()
+    API->>AUTH: authenticate (email, password)
+    AUTH->>ACC: login ()
+    ACC->>DB: query (account with this email)
+    DB-->>ACC: account record
+    ACC-->>AUTH: credentials correct or not
+    alt credentials are correct
+        AUTH->>AUTH: issueSessionToken ()
+        AUTH-->>API: session token (admin role)
+        API-->>AC: sendJsonResponse (session token)
+        AC-->>AD: logged in
+        Note over ADM,AD: From now on every request carries the session token
+    else credentials are wrong
+        AUTH-->>API: login failed
+        API-->>AC: sendJsonResponse (error: wrong email or password)
+        AC->>AC: showLogin (error message, try again)
+        Note over ADM,AD: The rest of this diagram assumes the login succeeded
+    end
     AD->>AC: showRequestDetails ()
     AC->>API: receiveRequest (requestId)
     API->>API: validateInput ()
